@@ -20,6 +20,12 @@ let
     inherit pkgs;
     defaultRemote = cfg.attachments.remote;
   });
+
+  # seed-obsidian は app(`nix run`)と同じ実体。vault へ .obsidian を非破壊コピーする。
+  seedObsidian = import ./seed-obsidian.nix {
+    inherit pkgs;
+    obsidianConfig = import ./obsidian-config.nix { inherit pkgs; };
+  };
 in
 {
   imports = [ ./papis.nix ];
@@ -118,9 +124,22 @@ in
         description = "papis ライブラリの定期バックストップ同期の間隔(秒)。";
       };
     };
+
+    obsidian = {
+      enable = lib.mkOption {
+        type = lib.types.bool;
+        default = false;
+        description = ''
+          vault に .obsidian 設定(Obsidian 設定 + community plugin 本体)を seed-once で配置する。
+          zettelkastenRoot/.obsidian が無いときだけ store の baseline をコピーし、既存の live 設定は
+          触らない(非破壊)。以降の Obsidian 上の変更は local のみで、baseline 更新は手動。
+        '';
+      };
+    };
   };
 
-  config = lib.mkIf (cfg.enable && cfg.attachments.enable) {
+  config = lib.mkMerge [
+    (lib.mkIf (cfg.enable && cfg.attachments.enable) {
     # ---- 層1: 宣言的な設定の抜けを eval 時に検知する ----
     assertions = [
       {
@@ -192,5 +211,12 @@ in
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/zettelkasten-sync.log";
       };
     };
-  };
+    })
+
+    (lib.mkIf (cfg.enable && cfg.obsidian.enable) {
+      home.activation.seedObsidian = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+        $DRY_RUN_CMD ${lib.getExe seedObsidian} ${lib.escapeShellArg cfg.zettelkastenRoot}
+      '';
+    })
+  ];
 }

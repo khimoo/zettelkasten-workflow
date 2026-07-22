@@ -1,0 +1,22 @@
+{
+  "collapse-filter": false,
+  "search": "path:Zettel  ",
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": false,
+  "showOrphans": true,
+  "collapse-color-groups": true,
+  "colorGroups": [],
+  "collapse-display": true,
+  "showArrow": false,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 1,
+  "lineSizeMultiplier": 1,
+  "collapse-forces": false,
+  "centerStrength": 0.643840691571473,
+  "repelStrength": 15.3430071009571,
+  "linkStrength": 1,
+  "linkDistance": 250,
+  "scale": 0.3003387451171874,
+  "close": true
+}

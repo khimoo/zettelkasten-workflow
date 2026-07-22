@@ -31,6 +31,14 @@
       papisSyncFor = system: (withRcloneSecretFor system) (import ./nix/papis-sync-script.nix {
         pkgs = nixpkgs.legacyPackages.${system};
       });
+
+      obsidianConfigFor = system: import ./nix/obsidian-config.nix {
+        pkgs = nixpkgs.legacyPackages.${system};
+      };
+      seedObsidianFor = system: import ./nix/seed-obsidian.nix {
+        pkgs = nixpkgs.legacyPackages.${system};
+        obsidianConfig = obsidianConfigFor system;
+      };
     in
     {
       homeManagerModules.zettelkasten = import ./nix/hm-module.nix;
@@ -39,6 +47,8 @@
       packages = forAllSystems (system: {
         zettelkasten-sync = attachmentsSyncFor system;
         papis-sync = papisSyncFor system;
+        seed-obsidian = seedObsidianFor system;
+        obsidian-config = obsidianConfigFor system;
         default = attachmentsSyncFor system;
       });
 
@@ -50,9 +60,11 @@
           };
           attachments = attachmentsSyncFor system;
           papis = papisSyncFor system;
+          seedObsidian = seedObsidianFor system;
         in {
           zettelkasten-sync = mkApp attachments "zettelkasten-sync";
           papis-sync = mkApp papis "papis-sync";
+          seed-obsidian = mkApp seedObsidian "seed-obsidian";
           default = mkApp attachments "zettelkasten-sync";
         });
     };

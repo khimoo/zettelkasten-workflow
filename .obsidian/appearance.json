@@ -1,0 +1,9 @@
+{
+  "accentColor": "",
+  "theme": "obsidian",
+  "nativeMenus": false,
+  "baseFontSize": 16,
+  "enabledCssSnippets": [
+    "mermaid-scroll"
+  ]
+}

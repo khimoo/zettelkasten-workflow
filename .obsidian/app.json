@@ -1,0 +1,17 @@
+{
+  "alwaysUpdateLinks": true,
+  "newFileLocation": "current",
+  "userIgnoreFilters": [
+    "Dailies/"
+  ],
+  "vimMode": false,
+  "showUnsupportedFiles": true,
+  "attachmentFolderPath": "attachments",
+  "useMarkdownLinks": false,
+  "pdfExportSettings": {
+    "pageSize": "A4",
+    "landscape": false,
+    "margin": "0",
+    "downscalePercent": 100
+  }
+}
