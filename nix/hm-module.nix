@@ -26,6 +26,21 @@ let
     inherit pkgs;
     obsidianConfig = import ./obsidian-config.nix { inherit pkgs; };
   };
+
+  # mirror-obsidian も app と同じ実体。vault の tracked .obsidian を config repo へミラーする(逆向き)。
+  # PATH には mirrorRepo が非 null のときだけ載せ、vault と dest を env 既定として焼き込む
+  # (引数/env で上書き可能。--set-default なので外から与えた env が優先)。
+  mirrorObsidian = import ./mirror-obsidian.nix { inherit pkgs; };
+  mirrorObsidianWrapped = pkgs.symlinkJoin {
+    name = "mirror-obsidian-wrapped";
+    paths = [ mirrorObsidian ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/mirror-obsidian \
+        --set-default ZETTELKASTEN_ROOT ${lib.escapeShellArg cfg.zettelkastenRoot} \
+        --set-default OBSIDIAN_CONFIG_REPO ${lib.escapeShellArg (toString cfg.obsidian.mirrorRepo)}
+    '';
+  };
 in
 {
   imports = [ ./papis.nix ];
@@ -135,6 +150,18 @@ in
           触らない(非破壊)。以降の Obsidian 上の変更は local のみで、baseline 更新は手動。
         '';
       };
+
+      mirrorRepo = lib.mkOption {
+        type = lib.types.nullOr lib.types.str;
+        default = null;
+        example = "/home/alice/zettelkasten-config";
+        description = ''
+          vault の tracked .obsidian をミラーする config repo(共有/public repo)の checkout 絶対パス。
+          null(既定)なら PATH に何も載せない。非 null かつ obsidian.enable のとき mirror-obsidian を
+          PATH に載せ、ZETTELKASTEN_ROOT と OBSIDIAN_CONFIG_REPO を env 既定として焼き込む
+          (引数/env で上書き可能)。環境固有パスなので消費側(flake_public 等)が settings で注入する。
+        '';
+      };
     };
   };
 
@@ -217,6 +244,12 @@ in
       home.activation.seedObsidian = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
         $DRY_RUN_CMD ${lib.getExe seedObsidian} ${lib.escapeShellArg cfg.zettelkastenRoot}
       '';
+    })
+
+    # config を共有 repo へ手動ミラーするための CLI を PATH に載せる(mirrorRepo 指定時のみ)。
+    # seed(public→vault)と対で、これは vault→public の逆向き。常駐はしない(たまに手で実行する)。
+    (lib.mkIf (cfg.enable && cfg.obsidian.enable && cfg.obsidian.mirrorRepo != null) {
+      home.packages = [ mirrorObsidianWrapped ];
     })
   ];
 }

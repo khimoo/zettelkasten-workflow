@@ -39,6 +39,9 @@
         pkgs = nixpkgs.legacyPackages.${system};
         obsidianConfig = obsidianConfigFor system;
       };
+      mirrorObsidianFor = system: import ./nix/mirror-obsidian.nix {
+        pkgs = nixpkgs.legacyPackages.${system};
+      };
     in
     {
       homeManagerModules.zettelkasten = import ./nix/hm-module.nix;
@@ -48,6 +51,7 @@
         zettelkasten-sync = attachmentsSyncFor system;
         papis-sync = papisSyncFor system;
         seed-obsidian = seedObsidianFor system;
+        mirror-obsidian = mirrorObsidianFor system;
         obsidian-config = obsidianConfigFor system;
         default = attachmentsSyncFor system;
       });
@@ -61,10 +65,12 @@
           attachments = attachmentsSyncFor system;
           papis = papisSyncFor system;
           seedObsidian = seedObsidianFor system;
+          mirrorObsidian = mirrorObsidianFor system;
         in {
           zettelkasten-sync = mkApp attachments "zettelkasten-sync";
           papis-sync = mkApp papis "papis-sync";
           seed-obsidian = mkApp seedObsidian "seed-obsidian";
+          mirror-obsidian = mkApp mirrorObsidian "mirror-obsidian";
           default = mkApp attachments "zettelkasten-sync";
         });
     };

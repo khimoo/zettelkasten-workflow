@@ -9,11 +9,16 @@ Zettelkasten（Obsidian vault）を複数マシンで再現するための **Nix
 - `homeManagerModules.zettelkasten` — vault 添付フォルダの rclone bisync・papis ライブラリ同期
   （`services.zettelkasten.{attachments,papis}`）と、`.obsidian` 設定の seed-once 配置
   （`services.zettelkasten.obsidian.enable`）を行う home-manager モジュール。
-- `packages.<system>.{zettelkasten-sync, papis-sync, seed-obsidian}` / `apps` — home-manager
-  非対応環境でも `nix run` で同じ実体を実行できる。HM モジュールとスクリプトを共有する。
+- `packages.<system>.{zettelkasten-sync, papis-sync, seed-obsidian, mirror-obsidian}` / `apps` —
+  home-manager 非対応環境でも `nix run` で同じ実体を実行できる。HM モジュールとスクリプトを共有する。
 - `.obsidian/`（＋ `packages.obsidian-config`）— sanitize 済みの Obsidian 設定と community
   plugin 本体。`seed-obsidian` がこれを vault に非破壊コピーする。private なパス（bookmark・
   レイアウトに開いていたノート・`workspace.json`）は除外/空化済み。
+- `mirror-obsidian`（＋ `services.zettelkasten.obsidian.mirrorRepo`）— `seed-obsidian` の逆向き。
+  vault の **tracked** `.obsidian`（＝各自の `.gitignore` が sanitize した集合）を、指定した
+  config repo（この repo 自身や fork の repo）へコピーして commit する。config の live な
+  source-of-truth は vault（`obsidian-git` が同期）で、この repo はそこからの派生スナップショット。
+  変更が溜まったら手で `mirror-obsidian` を実行して派生を更新する（`--dry-run` / `--push` あり）。
 - `secrets/rclone.yaml` — rclone 設定を sops で暗号化した暗号文。復号は同期スクリプトが
   実行時に行う（`nix/with-rclone-secret.nix`）。復号鍵は各マシンのユーザー SSH 鍵
   （ssh-to-age で age 鍵に変換）。公開されるのは受信者（age 公開鍵）と暗号文のみで、
@@ -41,4 +46,6 @@ Nix さえあれば（非 NixOS・非 home-manager）、ノートの private rep
 nix run github:khimoo/zettelkasten-workflow#seed-obsidian -- /path/to/vault
 # 添付/papis の同期をワンショット実行
 nix run github:khimoo/zettelkasten-workflow#zettelkasten-sync
+# vault の tracked .obsidian を config repo へミラーして commit(fork は自分の dest を渡す)
+nix run github:khimoo/zettelkasten-workflow#mirror-obsidian -- /path/to/vault /path/to/config-repo
 ```
