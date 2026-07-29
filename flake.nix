@@ -15,6 +15,8 @@
   #     添付 watcher と papis(設定 + ライブラリ同期 watcher)を常駐管理する。HM 環境向け。
   #   packages.<system>.zettelkasten-sync / apps.sync … 添付と papis をまとめて同期する単一コマンド。
   #     home-manager 非対応環境でも `nix run github:khimoo/zettelkasten-workflow#sync` でワンショット同期できる。
+  #   apps.obsidian … 配布する .obsidian のプラグインが要求する外部コマンド(git / claude)ごと
+  #     Obsidian を配る。unfree の許可もこちらで持ち、第三者に環境変数を要求しない。
   #   HM モジュールと apps は同じ nix/*-script.nix を共有する。同期ロジックを二重に持たない。
   outputs = { self, nixpkgs }:
     let
@@ -35,6 +37,15 @@
       mirrorObsidianFor = system: import ./nix/mirror-obsidian.nix {
         pkgs = nixpkgs.legacyPackages.${system};
       };
+
+      # obsidian と claude-code はどちらも unfree。第三者に NIXPKGS_ALLOW_UNFREE を
+      # 要求しないよう、この flake の側で許可した pkgs を用意する。
+      obsidianFor = system: import ./nix/obsidian.nix {
+        pkgs = import nixpkgs {
+          inherit system;
+          config.allowUnfree = true;
+        };
+      };
     in
     {
       homeManagerModules.zettelkasten = import ./nix/hm-module.nix;
@@ -45,6 +56,7 @@
         seed-obsidian = seedObsidianFor system;
         mirror-obsidian = mirrorObsidianFor system;
         obsidian-config = obsidianConfigFor system;
+        obsidian = obsidianFor system;
         default = syncFor system;
       });
 
@@ -61,6 +73,7 @@
           sync = mkApp sync "zettelkasten-sync";
           seed-obsidian = mkApp seedObsidian "seed-obsidian";
           mirror-obsidian = mkApp mirrorObsidian "mirror-obsidian";
+          obsidian = mkApp (obsidianFor system) "obsidian";
           default = mkApp sync "zettelkasten-sync";
         });
     };

@@ -11,11 +11,20 @@
 # sanitize = vault の .gitignore。ミラー対象は `git ls-files .obsidian`(vault が tracked にした
 # 集合)だけなので、workspace.json や token を持つ data.json 等は各自の gitignore が除外する。
 # tracked が空なら誤って dest の設定を消さないよう中止する(安全策)。
-{ pkgs }:
+#
+# excludedPlugins は「vault では使うが配らない」プラグイン。vault 側の .gitignore では表現できない
+# (vault は自分用に tracked にしている)ので、配布の境界であるこの層で落とす。プラグイン本体と
+# community-plugins.json の id の両方から除く——本体だけ消すと Obsidian が不在のプラグインを
+# 読もうとする。
+{ pkgs
+, # typst: 26MB の wasm を持ち込むうえ、WSL の Obsidian を native assertion で落とす
+  # (JS 側で catch できない)。上流は 2024 年から停滞。
+  excludedPlugins ? [ "typst" ]
+}:
 
 pkgs.writeShellApplication {
   name = "mirror-obsidian";
-  runtimeInputs = [ pkgs.coreutils pkgs.git pkgs.rsync ];
+  runtimeInputs = [ pkgs.coreutils pkgs.git pkgs.rsync pkgs.jq ];
   text = ''
     err() { echo "mirror-obsidian: $*" >&2; }
 
@@ -93,6 +102,19 @@ pkgs.writeShellApplication {
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
     ( cd "$vault" && cp --parents -p -- "''${tracked[@]}" "$tmp/" )
+
+    # ---- 配らないプラグインを落とす(本体と community-plugins.json の id の両方から) ----
+    excluded=(${pkgs.lib.escapeShellArgs excludedPlugins})
+    for plugin in "''${excluded[@]}"; do
+      rm -rf "$tmp/.obsidian/plugins/$plugin"
+    done
+
+    enabled_json="$tmp/.obsidian/community-plugins.json"
+    if [ -f "$enabled_json" ]; then
+      jq --argjson excluded ${pkgs.lib.escapeShellArg (builtins.toJSON excludedPlugins)} \
+        'map(select(IN($excluded[]) | not))' "$enabled_json" > "$enabled_json.new"
+      mv "$enabled_json.new" "$enabled_json"
+    fi
 
     if [ "$dry_run" -eq 1 ]; then
       err "--dry-run: $vault/.obsidian → $dest/.obsidian の差分"
