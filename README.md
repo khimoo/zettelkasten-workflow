@@ -19,10 +19,9 @@ Zettelkasten（Obsidian vault）を複数マシンで再現するための **Nix
   config repo（この repo 自身や fork の repo）へコピーして commit する。config の live な
   source-of-truth は vault（`obsidian-git` が同期）で、この repo はそこからの派生スナップショット。
   変更が溜まったら手で `mirror-obsidian` を実行して派生を更新する（`--dry-run` / `--push` あり）。
-- `secrets/rclone.yaml` — rclone 設定を sops で暗号化した暗号文。復号は同期スクリプトが
-  実行時に行う（`nix/with-rclone-secret.nix`）。復号鍵は各マシンのユーザー SSH 鍵
-  （ssh-to-age で age 鍵に変換）。公開されるのは受信者（age 公開鍵）と暗号文のみで、
-  平文の設定は載らない。
+
+この repo は rclone の認証情報を持たない。各マシンで `rclone config` が作った
+`~/.config/rclone/rclone.conf` を rclone 自身が既定で解決する。
 
 ## なぜ mechanism を分離したか
 

@@ -68,7 +68,7 @@ pkgs.writeShellApplication {
       echo "${name}: rclone remote '$remote_name' が未定義です(宣言的に生成できない認証部分)。" >&2
       echo "  → 次のいずれかで用意してください:" >&2
       echo "     - 対話取得:  rclone config   (remote 名 '$remote_name' / type drive)" >&2
-      echo "     - 既存の rclone.conf(sops 復号先など)を RCLONE_CONFIG で指す" >&2
+      echo "     - 既存の rclone.conf を RCLONE_CONFIG で指す" >&2
       exit 1
     fi
 

@@ -1,12 +1,11 @@
 # Zettelkasten(Obsidian vault)の完結型 home-manager モジュール。
 # vault のための機能——添付フォルダの Google Drive 同期と papis(参照文献)ライブラリの
 # 設定・同期——を一括で所有する。どのマシンでも zettelkasten flake を import し、vault の
-# clone 先(zettelkastenRoot)と rclone 設定パス(rcloneConfigPath)を注入するだけで、同一の
+# clone 先(zettelkastenRoot)を注入するだけで、同一の
 # Obsidian ワークフローが立ち上がる。
 #
-# rclone 認証情報は実行時復号ラッパー(with-rclone-secret.nix)が同期の直前に用意する。
-# このモジュールは復号の中身を知らず、ラップ済みスクリプトを常駐(watcher)させるだけ。
-# rcloneConfigPath を指定した場合のみ復号をスキップしてそのパスを使う(escape hatch)。
+# rclone 認証情報はこのモジュールの管轄外。各マシンで `rclone config` が作った
+# ~/.config/rclone/rclone.conf を rclone 自身が既定で解決する。
 #
 # 添付(attachments)と papis はそれぞれ独立した sub-toggle で個別に有効化でき、bisync の
 # workdir を分離してベースラインを混ぜない。papis 側の config は ./papis.nix が持つ
@@ -16,10 +15,10 @@
 let
   cfg = config.services.zettelkasten;
 
-  attachmentsSync = import ./with-rclone-secret.nix { inherit pkgs; } (import ./sync-script.nix {
+  attachmentsSync = import ./sync-script.nix {
     inherit pkgs;
     defaultRemote = cfg.attachments.remote;
-  });
+  };
 
   # seed-obsidian は app(`nix run`)と同じ実体。vault へ .obsidian を非破壊コピーする。
   seedObsidian = import ./seed-obsidian.nix {
@@ -54,15 +53,6 @@ in
       description = ''
         vault(Obsidian)の clone 先絶対パス。attachments/ と papis の references/ の親。
         これがマシン固有の唯一の設定で、消費側(flake_public 等)がホスト毎に注入する。
-      '';
-    };
-
-    rcloneConfigPath = lib.mkOption {
-      type = lib.types.nullOr lib.types.str;
-      default = null;
-      description = ''
-        rclone 設定ファイルのパス。null なら同期のたびに secrets/rclone.yaml を実行時復号する(既定)。
-        指定すると復号をスキップしてこのパスを RCLONE_CONFIG として使う(平文 rclone.conf 運用向けの escape hatch)。
       '';
     };
 
@@ -196,7 +186,7 @@ in
         Environment = [
           "ZETTELKASTEN_ATTACHMENTS_DIR=${cfg.attachments.dir}"
           "ZETTELKASTEN_REMOTE=${cfg.attachments.remote}"
-        ] ++ lib.optional (cfg.rcloneConfigPath != null) "RCLONE_CONFIG=${cfg.rcloneConfigPath}";
+        ];
         ExecStart = lib.getExe attachmentsSync;
       };
     };
@@ -231,8 +221,6 @@ in
         EnvironmentVariables = {
           ZETTELKASTEN_ATTACHMENTS_DIR = cfg.attachments.dir;
           ZETTELKASTEN_REMOTE = cfg.attachments.remote;
-        } // lib.optionalAttrs (cfg.rcloneConfigPath != null) {
-          RCLONE_CONFIG = cfg.rcloneConfigPath;
         };
         StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/zettelkasten-sync.log";
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/zettelkasten-sync.log";

@@ -6,17 +6,16 @@
 # 参照文献マネージャという安定ドメイン(papis)で付ける。backend 差し替えは sync-script の
 # 差し替えで済み、programs.papis 設定は不変。
 #
-# rclone 認証情報は papis-sync 自身(with-rclone-secret ラッパー)が実行時に復号する。
-# rcloneConfigPath 指定時のみ RCLONE_CONFIG として渡り復号をスキップ(添付同期と同一の経路)。
+# rclone 認証情報は各マシンの ~/.config/rclone/rclone.conf に委ねる(添付同期と同一の経路)。
 { config, lib, pkgs, ... }:
 
 let
   cfg = config.services.zettelkasten;
 
-  papisSync = import ./with-rclone-secret.nix { inherit pkgs; } (import ./papis-sync-script.nix {
+  papisSync = import ./papis-sync-script.nix {
     inherit pkgs;
     defaultRemote = cfg.papis.remote;
-  });
+  };
 in
 {
   config = lib.mkIf (cfg.enable && cfg.papis.enable) {
@@ -60,7 +59,7 @@ in
         Environment = [
           "PAPIS_LIBRARY_DIR=${cfg.papis.libraryDir}"
           "PAPIS_REMOTE=${cfg.papis.remote}"
-        ] ++ lib.optional (cfg.rcloneConfigPath != null) "RCLONE_CONFIG=${cfg.rcloneConfigPath}";
+        ];
         ExecStart = lib.getExe papisSync;
       };
     };
@@ -95,8 +94,6 @@ in
         EnvironmentVariables = {
           PAPIS_LIBRARY_DIR = cfg.papis.libraryDir;
           PAPIS_REMOTE = cfg.papis.remote;
-        } // lib.optionalAttrs (cfg.rcloneConfigPath != null) {
-          RCLONE_CONFIG = cfg.rcloneConfigPath;
         };
         StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/papis-sync.log";
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/papis-sync.log";
