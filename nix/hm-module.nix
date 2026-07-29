@@ -15,10 +15,10 @@
 let
   cfg = config.services.zettelkasten;
 
-  attachmentsSync = import ./sync-script.nix {
-    inherit pkgs;
-    defaultRemote = cfg.attachments.remote;
-  };
+  # 添付と papis で同じ実体。unit は監視対象ごとに分かれるので --only で片方に絞る。
+  # 同期先(remote / Drive のフォルダ名)は実行時に vault の設定ファイルから読むので、
+  # ここから注入するのは vault の位置だけ。
+  syncScript = import ./sync-script.nix { inherit pkgs; };
 
   # seed-obsidian は app(`nix run`)と同じ実体。vault へ .obsidian を非破壊コピーする。
   seedObsidian = import ./seed-obsidian.nix {
@@ -84,12 +84,6 @@ in
         description = "同期する添付フォルダの絶対パス(Obsidian の attachmentFolderPath と一致)。既定は vault ルート直下の attachments/。";
       };
 
-      remote = lib.mkOption {
-        type = lib.types.str;
-        default = "gdrive:zettelkasten-attachments";
-        description = "rclone remote:folder。remote 名は rclone config で作る名前と一致させる契約。";
-      };
-
       intervalSeconds = lib.mkOption {
         type = lib.types.ints.positive;
         default = 900;
@@ -109,12 +103,6 @@ in
         default = "${cfg.zettelkastenRoot}/references";
         defaultText = "\${zettelkastenRoot}/references";
         description = "papis ライブラリ(info.yaml と PDF が item ごとに同居)の絶対パス。既定は vault ルート直下の references/。";
-      };
-
-      remote = lib.mkOption {
-        type = lib.types.str;
-        default = "gdrive:papis-library";
-        description = "papis ライブラリの rclone remote:folder。";
       };
 
       opentool = lib.mkOption {
@@ -163,13 +151,9 @@ in
         assertion = cfg.attachments.dir != "";
         message = "services.zettelkasten.attachments.dir を設定してください(同期対象が特定できません)。";
       }
-      {
-        assertion = builtins.match ".+:.*" cfg.attachments.remote != null;
-        message = "services.zettelkasten.attachments.remote は 'remote:folder' 形式にしてください(例: gdrive:zettelkasten-attachments)。";
-      }
     ];
 
-    home.packages = [ attachmentsSync ];
+    home.packages = [ syncScript ];
 
     # Linux: oneshot 同期 + path unit(イベント駆動) + timer(定期バックストップ)。
     # watcher を常駐させず、OS 純正のパス監視/定期起動で同期を1発ずつ走らせる。
@@ -183,11 +167,8 @@ in
       };
       Service = {
         Type = "oneshot";
-        Environment = [
-          "ZETTELKASTEN_ATTACHMENTS_DIR=${cfg.attachments.dir}"
-          "ZETTELKASTEN_REMOTE=${cfg.attachments.remote}"
-        ];
-        ExecStart = lib.getExe attachmentsSync;
+        Environment = [ "ZETTELKASTEN_ROOT=${cfg.zettelkastenRoot}" ];
+        ExecStart = "${lib.getExe syncScript} --only attachments";
       };
     };
 
@@ -214,14 +195,11 @@ in
     launchd.agents.zettelkasten-sync = lib.mkIf pkgs.stdenv.isDarwin {
       enable = true;
       config = {
-        ProgramArguments = [ (lib.getExe attachmentsSync) ];
+        ProgramArguments = [ (lib.getExe syncScript) "--only" "attachments" ];
         RunAtLoad = true;
         WatchPaths = [ cfg.attachments.dir ];
         StartInterval = cfg.attachments.intervalSeconds;
-        EnvironmentVariables = {
-          ZETTELKASTEN_ATTACHMENTS_DIR = cfg.attachments.dir;
-          ZETTELKASTEN_REMOTE = cfg.attachments.remote;
-        };
+        EnvironmentVariables.ZETTELKASTEN_ROOT = cfg.zettelkastenRoot;
         StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/zettelkasten-sync.log";
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/zettelkasten-sync.log";
       };

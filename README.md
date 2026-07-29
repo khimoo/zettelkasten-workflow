@@ -9,8 +9,10 @@ Zettelkasten（Obsidian vault）を複数マシンで再現するための **Nix
 - `homeManagerModules.zettelkasten` — vault 添付フォルダの rclone bisync・papis ライブラリ同期
   （`services.zettelkasten.{attachments,papis}`）と、`.obsidian` 設定の seed-once 配置
   （`services.zettelkasten.obsidian.enable`）を行う home-manager モジュール。
-- `packages.<system>.{zettelkasten-sync, papis-sync, seed-obsidian, mirror-obsidian}` / `apps` —
-  home-manager 非対応環境でも `nix run` で同じ実体を実行できる。HM モジュールとスクリプトを共有する。
+- `apps.{sync, seed-obsidian, mirror-obsidian}` — home-manager 非対応環境でも `nix run` で同じ実体を
+  実行できる。HM モジュールとスクリプトを共有する。`sync` は添付と papis をまとめて同期する単一
+  コマンドで、同期先（rclone remote と Drive のフォルダ名）は vault 直下の `.zettelkasten.json`
+  が持つ（clone すれば2台目にも設定がそのまま届く）。
 - `.obsidian/`（＋ `packages.obsidian-config`）— sanitize 済みの Obsidian 設定と community
   plugin 本体。`seed-obsidian` がこれを vault に非破壊コピーする。private なパス（bookmark・
   レイアウトに開いていたノート・`workspace.json`）は除外/空化済み。
@@ -43,8 +45,8 @@ Nix さえあれば（非 NixOS・非 home-manager）、ノートの private rep
 ```sh
 # vault に .obsidian(設定 + plugin)を配置。既存があれば非破壊で skip。
 nix run github:khimoo/zettelkasten-workflow#seed-obsidian -- /path/to/vault
-# 添付/papis の同期をワンショット実行
-nix run github:khimoo/zettelkasten-workflow#zettelkasten-sync
+# 添付と papis の同期をワンショット実行(vault の中で実行するか、パスを渡す)
+nix run github:khimoo/zettelkasten-workflow#sync -- /path/to/vault
 # vault の tracked .obsidian を config repo へミラーして commit(fork は自分の dest を渡す)
 nix run github:khimoo/zettelkasten-workflow#mirror-obsidian -- /path/to/vault /path/to/config-repo
 ```

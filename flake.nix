@@ -13,18 +13,15 @@
   # 提供物:
   #   homeManagerModules.zettelkasten … 統合 HM モジュール services.zettelkasten。
   #     添付 watcher と papis(設定 + ライブラリ同期 watcher)を常駐管理する。HM 環境向け。
-  #   packages.<system>.{zettelkasten-sync,papis-sync} / apps … 実行可能スクリプト。
-  #     home-manager 非対応環境でも `nix run github:khimoo/zettelkasten#papis-sync` 等でワンショット同期できる。
+  #   packages.<system>.zettelkasten-sync / apps.sync … 添付と papis をまとめて同期する単一コマンド。
+  #     home-manager 非対応環境でも `nix run github:khimoo/zettelkasten-workflow#sync` でワンショット同期できる。
   #   HM モジュールと apps は同じ nix/*-script.nix を共有する。同期ロジックを二重に持たない。
   outputs = { self, nixpkgs }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
-      attachmentsSyncFor = system: import ./nix/sync-script.nix {
-        pkgs = nixpkgs.legacyPackages.${system};
-      };
-      papisSyncFor = system: import ./nix/papis-sync-script.nix {
+      syncFor = system: import ./nix/sync-script.nix {
         pkgs = nixpkgs.legacyPackages.${system};
       };
 
@@ -44,12 +41,11 @@
       homeManagerModules.default = self.homeManagerModules.zettelkasten;
 
       packages = forAllSystems (system: {
-        zettelkasten-sync = attachmentsSyncFor system;
-        papis-sync = papisSyncFor system;
+        zettelkasten-sync = syncFor system;
         seed-obsidian = seedObsidianFor system;
         mirror-obsidian = mirrorObsidianFor system;
         obsidian-config = obsidianConfigFor system;
-        default = attachmentsSyncFor system;
+        default = syncFor system;
       });
 
       apps = forAllSystems (system:
@@ -58,16 +54,14 @@
             type = "app";
             program = "${pkg}/bin/${bin}";
           };
-          attachments = attachmentsSyncFor system;
-          papis = papisSyncFor system;
+          sync = syncFor system;
           seedObsidian = seedObsidianFor system;
           mirrorObsidian = mirrorObsidianFor system;
         in {
-          zettelkasten-sync = mkApp attachments "zettelkasten-sync";
-          papis-sync = mkApp papis "papis-sync";
+          sync = mkApp sync "zettelkasten-sync";
           seed-obsidian = mkApp seedObsidian "seed-obsidian";
           mirror-obsidian = mkApp mirrorObsidian "mirror-obsidian";
-          default = mkApp attachments "zettelkasten-sync";
+          default = mkApp sync "zettelkasten-sync";
         });
     };
 }

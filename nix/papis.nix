@@ -12,10 +12,8 @@
 let
   cfg = config.services.zettelkasten;
 
-  papisSync = import ./papis-sync-script.nix {
-    inherit pkgs;
-    defaultRemote = cfg.papis.remote;
-  };
+  # 添付同期と同じ実体を --only papis で呼ぶ(同期ロジックを対象ごとに複製しない)。
+  syncScript = import ./sync-script.nix { inherit pkgs; };
 in
 {
   config = lib.mkIf (cfg.enable && cfg.papis.enable) {
@@ -24,10 +22,6 @@ in
       {
         assertion = cfg.papis.libraryDir != "";
         message = "services.zettelkasten.papis.libraryDir を設定してください(同期対象が特定できません)。";
-      }
-      {
-        assertion = builtins.match ".+:.*" cfg.papis.remote != null;
-        message = "services.zettelkasten.papis.remote は 'remote:folder' 形式にしてください(例: gdrive:papis-library)。";
       }
     ];
 
@@ -42,8 +36,8 @@ in
       };
     };
 
-    # 手動実行用に papis-sync をプロファイルへ(watchexec は papisWatch に埋め込み済み)。
-    home.packages = [ papisSync ];
+    # 同期コマンドは attachments 側でも同じものを入れる。同一 derivation なので重複しても実害はない。
+    home.packages = [ syncScript ];
 
     # Linux: oneshot 同期 + path unit(イベント駆動) + timer(定期バックストップ)。
     # ライブラリ未作成(papis add 前)は ConditionPathIsDirectory で skip する。
@@ -56,11 +50,8 @@ in
       };
       Service = {
         Type = "oneshot";
-        Environment = [
-          "PAPIS_LIBRARY_DIR=${cfg.papis.libraryDir}"
-          "PAPIS_REMOTE=${cfg.papis.remote}"
-        ];
-        ExecStart = lib.getExe papisSync;
+        Environment = [ "ZETTELKASTEN_ROOT=${cfg.zettelkastenRoot}" ];
+        ExecStart = "${lib.getExe syncScript} --only papis";
       };
     };
 
@@ -87,14 +78,11 @@ in
     launchd.agents.papis-sync = lib.mkIf pkgs.stdenv.isDarwin {
       enable = true;
       config = {
-        ProgramArguments = [ (lib.getExe papisSync) ];
+        ProgramArguments = [ (lib.getExe syncScript) "--only" "papis" ];
         RunAtLoad = true;
         WatchPaths = [ cfg.papis.libraryDir ];
         StartInterval = cfg.papis.intervalSeconds;
-        EnvironmentVariables = {
-          PAPIS_LIBRARY_DIR = cfg.papis.libraryDir;
-          PAPIS_REMOTE = cfg.papis.remote;
-        };
+        EnvironmentVariables.ZETTELKASTEN_ROOT = cfg.zettelkastenRoot;
         StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/papis-sync.log";
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/papis-sync.log";
       };
