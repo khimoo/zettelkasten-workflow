@@ -41,13 +41,11 @@ let
       else null;
   };
 
-  # 宣言的に片付かない残り(vault フォルダ・rclone の OAuth・初回同期)を進める対話 CLI。
-  # 有効な機能だけを案内するよう、components を渡す(無効な機能の手順は生成されない)。
+  # 宣言的に片付かない残り(rclone の OAuth・初回同期の曖昧ケース)を進める対話 CLI。
+  # vault の用意は initializeVault が activation で片付けるので、ここには含めない。
   setupScript = import ./setup.nix {
-    inherit pkgs;
+    inherit pkgs syncScript;
     inherit (cfg) vaultDir rcloneRemote;
-    seedObsidian = if cfg.obsidian.enable then seedObsidian else null;
-    syncScript = if anySync then syncScript else null;
   };
 
   mkSyncJob = import ./sync-job.nix {
@@ -55,6 +53,9 @@ let
     inherit (config.home) homeDirectory;
     inherit (cfg) after wants;
   };
+
+  # vault フォルダ自体を用意する(initializeVault のときだけ activation が呼ぶ)。
+  initVault = import ./init-vault.nix { inherit pkgs; };
 
   # vault へ .obsidian を非破壊コピーする(既に .obsidian があれば何もしない)。
   seedObsidian = import ./seed-obsidian.nix {
@@ -90,6 +91,19 @@ in
         vault(Obsidian のノートを置くフォルダ)の絶対パス。
         直下の attachments/ と references/ が同期対象になる。
         これがマシン固有の唯一の必須設定。
+      '';
+    };
+
+    initializeVault = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        vault フォルダを用意する(作成・git init・.gitignore の生成)。無ければ作るだけで、
+        既にあるものは触らない。
+
+        既定は無効で、vault の存在は利用側の責務。ゼロから始める環境(配布先)だけ有効にする。
+        既に別の経路で vault を用意している環境——ノートの private repo を clone する等——で
+        有効にすると、clone より先に空のフォルダを作ってしまい clone を妨げる。
       '';
     };
 
@@ -206,8 +220,17 @@ in
       ];
     })
 
-    (lib.mkIf cfg.enable {
+    # 同期対象が無ければ setup が案内することは残らない(vault は activation が用意する)。
+    (lib.mkIf (cfg.enable && anySync) {
       home.packages = [ setupScript ];
+    })
+
+    # vault の用意は他のどの副作用よりも先。linkGeneration の後に置くのは、副作用を持つ
+    # activation を write boundary より後ろに置くという home-manager の規約に合わせるため。
+    (lib.mkIf (cfg.enable && cfg.initializeVault) {
+      home.activation.zettelkastenVault = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+        $DRY_RUN_CMD ${lib.getExe initVault} ${lib.escapeShellArg cfg.vaultDir}
+      '';
     })
 
     (lib.mkIf (cfg.enable && anySync) {
@@ -245,7 +268,9 @@ in
     })
 
     (lib.mkIf (cfg.enable && cfg.obsidian.enable) {
-      home.activation.seedObsidian = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+      # zettelkastenVault が無い構成(initializeVault = false)でも、存在しない entry 名は
+      # 依存として無視されるだけなので、そのまま書ける。
+      home.activation.seedObsidian = lib.hm.dag.entryAfter [ "linkGeneration" "zettelkastenVault" ] ''
         $DRY_RUN_CMD ${lib.getExe seedObsidian} ${lib.escapeShellArg cfg.vaultDir}
       '';
     })

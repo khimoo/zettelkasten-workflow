@@ -72,6 +72,9 @@ echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
             services.zettelkasten = {
               enable = true;
               vaultDir = "${homeDirectory}/zettelkasten";
+              # ゼロから始めるなら true。vault フォルダを switch が用意する。
+              # 既にノートの repo を clone してある/これから clone するなら false。
+              initializeVault = true;
               obsidian.enable = true;
               papis.enable = true;
             };
@@ -90,25 +93,29 @@ nix run home-manager/release-25.11 -- switch
 
 初回は Obsidian などのダウンロードで時間がかかる。2回目からは `home-manager switch` で足りる。
 
+この switch が、vault フォルダの用意（`initializeVault = true` のとき。作成・`git init`・
+`.gitignore`）と `.obsidian` 設定の配置まで済ませる。どちらも既にあるものは触らない。
+
 ### 4. `zettelkasten-setup` を実行する
 
 ```sh
 zettelkasten-setup
 ```
 
-宣言的に片付かない残り——vault フォルダの作成と `git init`、Google Drive の認証
-（`rclone config` を開いて渡す）、初回同期——を順に聞く。**GitHub には一切触らない**ので、
-vault を push したければ自分で remote を足す。
+宣言では原理的に届かない残り——Google Drive の認証（`rclone config` を開いて渡す）と、
+初回同期が曖昧なとき（ローカルと Drive の両方に中身がある）の判断——だけを聞く。
+**GitHub には一切触らない**ので、vault を push したければ自分で remote を足す。
 
 途中で止めても、もう一度実行すれば済んだところは飛ばす。進捗ファイルは持たず、各ステップが
-実物（`.git` / `.obsidian` / rclone remote / bisync の記録）を見て判断する。
+実物（rclone remote / bisync の記録）を見て判断する。
 
 最後に残る手作業は2つ:
 
 - Obsidian を起動して vault を開く。初回だけ「このプラグインの製作者を信用しますか」を聞かれる。
 - Claude を使うプラグインを動かすなら、一度 `claude` を実行してログインする。
 
-2台目以降は、vault を clone してから 2→3→4 を同じようにやる。
+2台目以降は、`initializeVault` を `false` にしたうえで vault を clone してから 3→4 をやる
+（先に空フォルダを作ると clone が失敗するため）。
 
 ## 設定できること
 
@@ -118,6 +125,7 @@ vault を push したければ自分で remote を足す。
 |---|---|---|
 | `enable` | `false` | モジュール全体の on/off |
 | `vaultDir` | （必須） | vault の絶対パス。直下の `attachments/` と `references/` が同期対象 |
+| `initializeVault` | `false` | vault フォルダを switch が用意する（作成・`git init`・`.gitignore`）。別経路で clone するなら `false` のまま |
 | `rcloneRemote` | `"gdrive"` | 同期先の rclone remote 名 |
 | `attachments.enable` | `true` | 添付フォルダの Google Drive 双方向同期 |
 | `attachments.folder` | `"zettelkasten-attachments"` | Drive 側のフォルダ名 |

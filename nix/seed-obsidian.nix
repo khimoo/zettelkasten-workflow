@@ -1,6 +1,5 @@
-# vault に .obsidian 設定を非破壊で配置(seed)するスクリプト。
-# home-manager module(activation)と `nix run`(ワンショット)の両方がこれを共有する
-# ——ロジックを二重に持たない。vault パスは第1引数か ZETTELKASTEN_ROOT で受け取る(依存性逆転)。
+# vault に .obsidian 設定を非破壊で配置(seed)するスクリプト。module の activation が呼ぶ。
+# vault パスは第1引数か ZETTELKASTEN_ROOT で受け取る(依存性逆転)。
 #
 # 非破壊(seed-once)の契約:
 #   - vault の .obsidian が既にあれば何もしない(既存の live 設定を上書きしない)

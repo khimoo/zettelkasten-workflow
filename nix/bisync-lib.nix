@@ -57,6 +57,19 @@
       fi
     }
 
+    # 同期で失うものが無いディレクトリか。空か、placeholder(.keep/.gitkeep)しか無い状態を指す。
+    zk_dir_is_empty() {
+      local entry
+      for entry in "$1"/* "$1"/.*; do
+        case "''${entry##*/}" in
+          '*' | '.*' | . | .. | .keep | .gitkeep) continue ;;
+        esac
+        [ -e "$entry" ] || continue
+        return 1
+      done
+      return 0
+    }
+
     zk_bisync() {
       local label dir remote baseline_dir
       label="$1"
@@ -91,15 +104,19 @@
       done
 
       # 記録が無ければこのペアの初回。remote が空/不在なら安全に自己初期化(mkdir + --resync)する。
-      # remote にデータがあるのに記録が無い場合は「記録の喪失」か「既存 remote への新マシン合流」の
-      # 曖昧ケースなので、誤同期を避けて明示の ZK_FORCE_RESYNC=1 を要求する(対話で聞くのは
-      # zettelkasten-setup の役目で、ここは非対話でも安全に止まることだけを保証する)。
+      # remote にデータがあるのに記録が無い場合、危険なのは「ローカルにも実体があって、どちらが
+      # 正か決められない」ときだけ。ローカルが空なら失うものが無いので、新マシンの合流として
+      # そのまま resync する。両側に実体があるときだけ曖昧ケースとして明示の ZK_FORCE_RESYNC=1 を
+      # 要求する(対話で聞くのは zettelkasten-setup の役目で、ここは非対話でも安全に止まることだけを
+      # 保証する)。
       if [ "$first_run" = true ]; then
         local remote_listing
         if remote_listing="$(rclone "''${ZK_RCLONE_ARGS[@]}" lsf "$remote" 2>/dev/null)" && [ -n "$remote_listing" ]; then
-          if [ "''${ZK_FORCE_RESYNC:-}" != "1" ] && [ "$resync" != true ]; then
-            echo "$label: このマシンには同期の記録が無いのに、Google Drive 側にはデータがあります: $remote" >&2
-            echo "  (記録の喪失か、既存の Drive へ新しいマシンを合流させようとしているかのどちらか)" >&2
+          if zk_dir_is_empty "$dir"; then
+            echo "$label: 初回同期です($dir が空)。Google Drive 側の内容を取り込みます。" >&2
+          elif [ "''${ZK_FORCE_RESYNC:-}" != "1" ] && [ "$resync" != true ]; then
+            echo "$label: このマシンには同期の記録が無いのに、両側にデータがあります: $dir <-> $remote" >&2
+            echo "  (記録の喪失か、中身の違う2つを合流させようとしているかのどちらか)" >&2
             echo "  → 合流させる場合のみ明示的に: ZK_FORCE_RESYNC=1 $ZK_SYNC_NAME --resync" >&2
             return 1
           fi

@@ -35,6 +35,9 @@
       mirrorObsidianFor = system: import ./nix/mirror-obsidian.nix {
         pkgs = nixpkgs.legacyPackages.${system};
       };
+      initVaultFor = system: import ./nix/init-vault.nix {
+        pkgs = nixpkgs.legacyPackages.${system};
+      };
 
       # obsidian と claude-code はどちらも unfree。利用者に NIXPKGS_ALLOW_UNFREE を
       # 要求しないよう、この flake の側で許可した pkgs を用意する。
@@ -51,6 +54,7 @@
 
       packages = forAllSystems (system: {
         seed-obsidian = seedObsidianFor system;
+        init-vault = initVaultFor system;
         mirror-obsidian = mirrorObsidianFor system;
         obsidian-config = obsidianConfigFor system;
         obsidian = obsidianFor system;
