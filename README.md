@@ -6,6 +6,11 @@ Zettelkasten（Obsidian vault）を複数マシンで再現するための **Nix
 
 ## 提供するもの
 
+- `apps.default`（`zettelkasten-bootstrap`）— 新しいマシンで使える状態になるまでの対話スクリプト。
+  vault の用意（必要なら `git init`）→ `.obsidian` の配置 → rclone の接続確認 → 同期先設定の保存 →
+  初回同期、までを順に進める。進捗ファイルは持たず、各ステップが実物（`.git` / `.obsidian` /
+  rclone remote / `.zettelkasten.json` / bisync の記録）を見て済んでいれば skip するので、
+  途中で止めても再実行すれば続きから進む。**GitHub には一切触らない** — remote との接続は各自の領分。
 - `homeManagerModules.zettelkasten` — vault 添付フォルダの rclone bisync・papis ライブラリ同期
   （`services.zettelkasten.{attachments,papis}`）と、`.obsidian` 設定の seed-once 配置
   （`services.zettelkasten.obsidian.enable`）を行う home-manager モジュール。
@@ -46,7 +51,16 @@ inputs.zettelkasten.url = "github:khimoo/zettelkasten-workflow";
 # services.zettelkasten.enable = true; obsidian.enable = true; zettelkastenRoot = "…";
 ```
 
-Nix さえあれば（非 NixOS・非 home-manager）、ノートの private repo を clone した後に:
+Nix さえあれば（非 NixOS・非 home-manager）、まずこれ一つ:
+
+```sh
+nix run github:khimoo/zettelkasten-workflow
+```
+
+既に vault がある場合（2台目など）は clone してから同じコマンドを実行する。設定ファイル
+（`.zettelkasten.json`）は vault に入っているので、聞かれる内容は既定値のまま Enter で済む。
+
+個別に実行したいときは:
 
 ```sh
 # vault に .obsidian(設定 + plugin)を配置。既存があれば非破壊で skip。

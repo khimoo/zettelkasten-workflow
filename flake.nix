@@ -11,6 +11,8 @@
   # options 経由で注入する(依存性逆転)。
   #
   # 提供物:
+  #   apps.default(zettelkasten-bootstrap) … 新しいマシンで使える状態にするまでの対話スクリプト。
+  #     `nix run github:khimoo/zettelkasten-workflow` の入口。
   #   homeManagerModules.zettelkasten … 統合 HM モジュール services.zettelkasten。
   #     添付 watcher と papis(設定 + ライブラリ同期 watcher)を常駐管理する。HM 環境向け。
   #   packages.<system>.zettelkasten-sync / apps.sync … 添付と papis をまとめて同期する単一コマンド。
@@ -37,6 +39,11 @@
       mirrorObsidianFor = system: import ./nix/mirror-obsidian.nix {
         pkgs = nixpkgs.legacyPackages.${system};
       };
+      bootstrapFor = system: import ./nix/bootstrap.nix {
+        pkgs = nixpkgs.legacyPackages.${system};
+        seedObsidian = seedObsidianFor system;
+        syncScript = syncFor system;
+      };
 
       # obsidian と claude-code はどちらも unfree。第三者に NIXPKGS_ALLOW_UNFREE を
       # 要求しないよう、この flake の側で許可した pkgs を用意する。
@@ -52,12 +59,13 @@
       homeManagerModules.default = self.homeManagerModules.zettelkasten;
 
       packages = forAllSystems (system: {
+        bootstrap = bootstrapFor system;
         zettelkasten-sync = syncFor system;
         seed-obsidian = seedObsidianFor system;
         mirror-obsidian = mirrorObsidianFor system;
         obsidian-config = obsidianConfigFor system;
         obsidian = obsidianFor system;
-        default = syncFor system;
+        default = bootstrapFor system;
       });
 
       apps = forAllSystems (system:
@@ -74,7 +82,7 @@
           seed-obsidian = mkApp seedObsidian "seed-obsidian";
           mirror-obsidian = mkApp mirrorObsidian "mirror-obsidian";
           obsidian = mkApp (obsidianFor system) "obsidian";
-          default = mkApp sync "zettelkasten-sync";
+          default = mkApp (bootstrapFor system) "zettelkasten-bootstrap";
         });
     };
 }

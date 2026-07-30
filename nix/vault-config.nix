@@ -21,6 +21,10 @@
   # 埋め込む側のスクリプト冒頭に展開して使う関数群。
   #   zk_vault_root [path]  … vault の絶対パスを stdout に返す
   #   zk_cfg_load <vault>   … 設定を読んで ZK_* 変数に載せる
+  #   zk_cfg_write <vault> <remote> <attachments folder> <papis sync 1/0> <papis folder>
+  #
+  # 読みと書きを同じファイルに置くのは、形式の知識が分かれると「書いた直後に読めない」という
+  # 壊れ方をするため(version 番号・キー名・必須項目の判断が食い違う)。定数を共有させる。
   text = ''
     ZK_CONFIG_BASENAME=".zettelkasten.json"
     ZK_CONFIG_VERSION=1
@@ -28,6 +32,8 @@
     ZK_PAPIS_SUBDIR="references"
 
     # vault の絶対パスを決める。引数 > ZETTELKASTEN_ROOT > cwd の git toplevel。
+    # (SC2329: 埋め込み先ごとに使う関数が違う。読みだけ・書きだけの利用者がいるのは想定内)
+    # shellcheck disable=SC2329
     zk_vault_root() {
       local candidate
       candidate="''${1:-''${ZETTELKASTEN_ROOT:-}}"
@@ -54,6 +60,8 @@
     #   ZK_VAULT ZK_RCLONE_REMOTE
     #   ZK_ATTACHMENTS_DIR ZK_ATTACHMENTS_REMOTE
     #   ZK_PAPIS_SYNC(1/0) ZK_PAPIS_DIR ZK_PAPIS_REMOTE
+    # (SC2034: 設定した変数を全部使うとは限らない。呼び出し側が必要な分だけ読む)
+    # shellcheck disable=SC2329,SC2034
     zk_cfg_load() {
       local vault cfg version
       vault="$1"
@@ -108,6 +116,34 @@
       else
         ZK_PAPIS_REMOTE=""
       fi
+    }
+
+    # shellcheck disable=SC2329
+    zk_cfg_write() {
+      local vault remote attachments_folder papis_folder cfg papis_sync_json
+      vault="$1"
+      remote="$2"
+      attachments_folder="$3"
+      papis_sync_json=false
+      if [ "$4" = "1" ]; then
+        papis_sync_json=true
+      fi
+      papis_folder="$5"
+      cfg="$vault/$ZK_CONFIG_BASENAME"
+
+      # 一時ファイルに書いてから mv。書き込み中に落ちても半端な JSON を残さない。
+      jq -n \
+        --argjson version "$ZK_CONFIG_VERSION" \
+        --arg remote "$remote" \
+        --arg attachments "$attachments_folder" \
+        --argjson papisSync "$papis_sync_json" \
+        --arg papisFolder "$papis_folder" \
+        '{ version: $version,
+           rcloneRemote: $remote,
+           attachments: { folder: $attachments },
+           papis: { sync: $papisSync, folder: $papisFolder } }' \
+        > "$cfg.new"
+      mv "$cfg.new" "$cfg"
     }
   '';
 }

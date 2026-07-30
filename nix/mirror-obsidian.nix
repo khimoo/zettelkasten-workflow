@@ -15,7 +15,7 @@
 # excludedPlugins は「vault では使うが配らない」プラグイン。vault 側の .gitignore では表現できない
 # (vault は自分用に tracked にしている)ので、配布の境界であるこの層で落とす。プラグイン本体と
 # community-plugins.json の id の両方から除く——本体だけ消すと Obsidian が不在のプラグインを
-# 読もうとする。
+# 読もうとする。同じ理由で obsidian-git の autoPullOnBoot も配布時だけ false にする。
 { pkgs
 , # typst: 26MB の wasm を持ち込むうえ、WSL の Obsidian を native assertion で落とす
   # (JS 側で catch できない)。上流は 2024 年から停滞。
@@ -114,6 +114,14 @@ pkgs.writeShellApplication {
       jq --argjson excluded ${pkgs.lib.escapeShellArg (builtins.toJSON excludedPlugins)} \
         'map(select(IN($excluded[]) | not))' "$enabled_json" > "$enabled_json.new"
       mv "$enabled_json.new" "$enabled_json"
+    fi
+
+    # 配布先の vault は remote を持たないことがあり、起動時 pull が毎回エラー通知になる。
+    # owner の vault は true のままで良いので、配布の境界であるここで落とす。
+    git_json="$tmp/.obsidian/plugins/obsidian-git/data.json"
+    if [ -f "$git_json" ]; then
+      jq '.autoPullOnBoot = false' "$git_json" > "$git_json.new"
+      mv "$git_json.new" "$git_json"
     fi
 
     if [ "$dry_run" -eq 1 ]; then
