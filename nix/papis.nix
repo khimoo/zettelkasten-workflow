@@ -13,7 +13,7 @@ let
   cfg = config.services.zettelkasten;
 
   # 添付同期と同じ実体を --only papis で呼ぶ(同期ロジックを対象ごとに複製しない)。
-  syncScript = import ./sync-script.nix { inherit pkgs; };
+  syncScript = import ./sync-for-cfg.nix { inherit pkgs cfg; };
 in
 {
   config = lib.mkIf (cfg.enable && cfg.papis.enable) {
@@ -50,7 +50,6 @@ in
       };
       Service = {
         Type = "oneshot";
-        Environment = [ "ZETTELKASTEN_ROOT=${cfg.zettelkastenRoot}" ];
         ExecStart = "${lib.getExe syncScript} --only papis";
       };
     };
@@ -82,7 +81,6 @@ in
         RunAtLoad = true;
         WatchPaths = [ cfg.papis.libraryDir ];
         StartInterval = cfg.papis.intervalSeconds;
-        EnvironmentVariables.ZETTELKASTEN_ROOT = cfg.zettelkastenRoot;
         StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/papis-sync.log";
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/papis-sync.log";
       };

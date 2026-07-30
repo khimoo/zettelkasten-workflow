@@ -2,7 +2,7 @@
 # コマンドから呼ぶ(同期ロジックを対象ごとに複製しない)。
 #
 # 同期パラメータ(対象パス・remote)は引数で受け取り、この層では一切決めない。
-# 決めるのは vault の設定ファイル(nix/vault-config.nix)で、呼ぶ側がそれを読んで渡す。
+# 決めるのは home-manager の options で、nix/sync-script.nix が eval 時に焼き込んで渡す。
 #
 # 宣言的に用意できない要素(rclone の認証情報)は preflight で実行前に検知し、復旧手順つきで
 # loud に落とす。サイレントに半端な同期をしない。同期の記録(bisync の baseline)は machine-local
@@ -65,7 +65,7 @@
       baseline_dir="''${XDG_CACHE_HOME:-$HOME/.cache}/rclone/$4"
       shift 4
 
-      # 規約で位置が決まっているフォルダなので、無ければ作る(vault は設定ファイルの存在で確認済み)。
+      # options で位置が決まっているフォルダなので、無ければ作る。
       if [ ! -d "$dir" ]; then
         echo "$label: $dir が無いので作成します。" >&2
         mkdir -p "$dir" || return 1
@@ -93,7 +93,7 @@
       # 記録が無ければこのペアの初回。remote が空/不在なら安全に自己初期化(mkdir + --resync)する。
       # remote にデータがあるのに記録が無い場合は「記録の喪失」か「既存 remote への新マシン合流」の
       # 曖昧ケースなので、誤同期を避けて明示の ZK_FORCE_RESYNC=1 を要求する(対話で聞くのは
-      # bootstrap の役目で、ここは非対話でも安全に止まることだけを保証する)。
+      # zettelkasten-setup の役目で、ここは非対話でも安全に止まることだけを保証する)。
       if [ "$first_run" = true ]; then
         local remote_listing
         if remote_listing="$(rclone "''${ZK_RCLONE_ARGS[@]}" lsf "$remote" 2>/dev/null)" && [ -n "$remote_listing" ]; then

@@ -1,41 +1,71 @@
 # vault の添付フォルダと papis ライブラリを Google Drive へ双方向同期する単一コマンド。
 #
-# 対象ごとにコマンドを分けない。日常の操作は「vault の中で zettelkasten-sync を打つ」の1つで、
-# 何が同期されるか(papis を含むか)は vault の設定ファイルが決める。home-manager の各 unit だけは
-# 監視対象ごとに起動されるので --only で片方に絞る。
+# 対象ごとにコマンドを分けない。日常の操作は zettelkasten-sync の1つで、何が同期されるかは
+# home-manager の options が eval 時に決める。unit だけは監視対象ごとに起動されるので
+# --only で片方に絞る。
 #
-# 同期パラメータは実行時に vault の .zettelkasten.json から読む(nix/vault-config.nix)。
-# 同期の本体は nix/bisync-lib.nix。ここは「引数と設定を解決して bisync を対象ぶん呼ぶ」層。
-{ pkgs }:
+# 同期先(remote 名・Drive のフォルダ名・対象パス)はここに焼き込まれる。実行時に設定を読む層は
+# 持たない——設定の source は flake ただ一つで、解決順を1段に保つ。有効でない対象は
+# そもそもコードが生成されないので、papis を使わない環境に papis の分岐は存在しない。
+#
+# 同期の本体は nix/bisync-lib.nix。ここは「どの対象を、どこへ」だけを持つ層。
+#
+# attachments / papis は { dir, folder } か null。null なら その対象は生成しない。
+{ pkgs
+, rcloneRemote
+, attachments ? null
+, papis ? null
+}:
 
 let
-  vaultConfig = import ./vault-config.nix { inherit pkgs; };
+  inherit (pkgs) lib;
   bisync = import ./bisync-lib.nix { inherit pkgs; };
+
+  targets = lib.optional (attachments != null) "attachments"
+    ++ lib.optional (papis != null) "papis";
+
+  targetList = lib.concatStringsSep "|" targets;
+
+  example = opt: desc:
+    "  zettelkasten-sync ${opt}${lib.concatStrings (lib.genList (_: " ") (21 - lib.stringLength opt))}${desc}";
+
+  usageText = lib.concatStringsSep "\n" ([
+    "使い方: zettelkasten-sync [--only ${targetList}] [rclone bisync への追加引数...]"
+    ""
+    "  同期先は home-manager の services.zettelkasten が持つ。引数では変えられない。"
+    ""
+    "例:"
+    (example "" "設定どおり全部同期する")
+  ]
+  # 対象が1つしかない環境で --only を勧めても意味がない。
+  ++ lib.optional (lib.length targets > 1)
+    (example "--only ${lib.last targets}" "${lib.last targets} だけ同期する")
+  ++ [ (example "--dry-run" "rclone に渡す引数はそのまま素通しする") ]);
+
+  # 対象ごとの同期ブロック。baseline(同期の記録)の名前は対象ごとに固定で、
+  # 変えると既存マシンが「記録なし」と判定されて resync を要求される。
+  syncBlock = { name, label, dir, folder, baseline }: ''
+    if [ -z "$only" ] || [ "$only" = ${name} ]; then
+      echo "==> ${label}: ${dir} <-> ${rcloneRemote}:${folder}" >&2
+      zk_bisync ${lib.escapeShellArg label} ${lib.escapeShellArg dir} \
+        ${lib.escapeShellArg "${rcloneRemote}:${folder}"} \
+        ${baseline} "''${rclone_args[@]}" || status=1
+    fi
+  '';
 in
 pkgs.writeShellApplication {
   name = "zettelkasten-sync";
-  runtimeInputs = vaultConfig.runtimeInputs ++ bisync.runtimeInputs;
+  runtimeInputs = bisync.runtimeInputs;
   text = ''
-    ${vaultConfig.text}
     ${bisync.text}
 
     usage() {
       cat >&2 <<'EOF'
-    使い方: zettelkasten-sync [vault のパス] [--only attachments|papis] [rclone bisync への追加引数...]
-
-      vault のパスは省略できる(vault の中で実行するか ZETTELKASTEN_ROOT で渡した場合)。
-      同期先(rclone remote と Drive のフォルダ名)は vault の .zettelkasten.json が持つ。
-
-    例:
-      zettelkasten-sync                      vault の中で、設定どおり全部同期する
-      zettelkasten-sync ~/zettelkasten       vault を明示する
-      zettelkasten-sync --only papis         papis ライブラリだけ同期する
-      zettelkasten-sync --dry-run            rclone に渡す引数はそのまま素通しする
+    ${usageText}
     EOF
     }
 
     only=""
-    vault_arg=""
     rclone_args=()
 
     while [ $# -gt 0 ]; do
@@ -43,15 +73,7 @@ pkgs.writeShellApplication {
         --only)
           only="''${2:-}"
           if [ -z "$only" ]; then
-            echo "--only には attachments か papis を指定してください。" >&2
-            exit 1
-          fi
-          shift 2
-          ;;
-        --vault)
-          vault_arg="''${2:-}"
-          if [ -z "$vault_arg" ]; then
-            echo "--vault には vault の絶対パスを指定してください。" >&2
+            echo "--only には ${lib.concatStringsSep " か " targets} を指定してください。" >&2
             exit 1
           fi
           shift 2
@@ -66,50 +88,39 @@ pkgs.writeShellApplication {
           shift
           ;;
         *)
-          if [ -z "$vault_arg" ]; then
-            vault_arg="$1"
-          else
-            rclone_args+=("$1")
-          fi
-          shift
+          echo "解釈できない引数です: $1" >&2
+          usage
+          exit 1
           ;;
       esac
     done
 
     case "$only" in
-      "" | attachments | papis) ;;
+      ${lib.concatStringsSep " | " ([ "\"\"" ] ++ targets)}) ;;
       *)
-        echo "--only には attachments か papis を指定してください: $only" >&2
+        echo "--only には ${lib.concatStringsSep " か " targets} を指定してください: ''${only:-(空)}" >&2
         exit 1
         ;;
     esac
 
-    vault="$(zk_vault_root "$vault_arg")"
-    zk_cfg_load "$vault"
-
     zk_rclone_init
-    zk_rclone_check "$ZK_RCLONE_REMOTE"
+    zk_rclone_check ${lib.escapeShellArg rcloneRemote}
 
-    # 片方が失敗しても相方は試す(どちらが落ちたかを両方見せる)。最後に失敗があれば非ゼロで終わる。
+    # 対象ごとに独立して試す(片方が落ちても相方を止めない)。1つでも失敗したら非ゼロで終わる。
     status=0
 
-    if [ -z "$only" ] || [ "$only" = attachments ]; then
-      echo "==> 添付: $ZK_ATTACHMENTS_DIR <-> $ZK_ATTACHMENTS_REMOTE" >&2
-      zk_bisync "添付" "$ZK_ATTACHMENTS_DIR" "$ZK_ATTACHMENTS_REMOTE" \
-        bisync-zettelkasten "''${rclone_args[@]}" || status=1
-    fi
-
-    if [ -z "$only" ] || [ "$only" = papis ]; then
-      if [ "$ZK_PAPIS_SYNC" = "1" ]; then
-        echo "==> papis: $ZK_PAPIS_DIR <-> $ZK_PAPIS_REMOTE" >&2
-        zk_bisync "papis" "$ZK_PAPIS_DIR" "$ZK_PAPIS_REMOTE" \
-          bisync-papis "''${rclone_args[@]}" || status=1
-      elif [ "$only" = papis ]; then
-        # 明示的に papis を指定されたのに無効なのは、設定の取り違えなので黙って成功にしない。
-        echo "papis の同期は設定で無効です($ZK_VAULT/$ZK_CONFIG_BASENAME の papis.sync)。" >&2
-        status=1
-      fi
-    fi
+    ${lib.optionalString (attachments != null) (syncBlock {
+      name = "attachments";
+      label = "添付";
+      inherit (attachments) dir folder;
+      baseline = "bisync-zettelkasten";
+    })}
+    ${lib.optionalString (papis != null) (syncBlock {
+      name = "papis";
+      label = "papis";
+      inherit (papis) dir folder;
+      baseline = "bisync-papis";
+    })}
 
     exit "$status"
   '';

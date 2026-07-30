@@ -16,17 +16,16 @@ let
   cfg = config.services.zettelkasten;
 
   # 添付と papis で同じ実体。unit は監視対象ごとに分かれるので --only で片方に絞る。
-  # 同期先(remote / Drive のフォルダ名)は実行時に vault の設定ファイルから読むので、
-  # ここから注入するのは vault の位置だけ。
-  syncScript = import ./sync-script.nix { inherit pkgs; };
+  # 同期先は options から eval 時に焼き込む(実行時に設定を読む層は無い)。
+  syncScript = import ./sync-for-cfg.nix { inherit pkgs cfg; };
 
-  # seed-obsidian は app(`nix run`)と同じ実体。vault へ .obsidian を非破壊コピーする。
+  # vault へ .obsidian を非破壊コピーする(既に .obsidian があれば何もしない)。
   seedObsidian = import ./seed-obsidian.nix {
     inherit pkgs;
     obsidianConfig = import ./obsidian-config.nix { inherit pkgs; };
   };
 
-  # mirror-obsidian も app と同じ実体。vault の tracked .obsidian を config repo へミラーする(逆向き)。
+  # vault の tracked .obsidian を config repo へミラーする(seed の逆向き)。
   # PATH には mirrorRepo が非 null のときだけ載せ、vault と dest を env 既定として焼き込む
   # (引数/env で上書き可能。--set-default なので外から与えた env が優先)。
   mirrorObsidian = import ./mirror-obsidian.nix { inherit pkgs; };
@@ -53,6 +52,15 @@ in
       description = ''
         vault(Obsidian)の clone 先絶対パス。attachments/ と papis の references/ の親。
         これがマシン固有の唯一の設定で、消費側(flake_public 等)がホスト毎に注入する。
+      '';
+    };
+
+    rcloneRemote = lib.mkOption {
+      type = lib.types.str;
+      default = "gdrive";
+      description = ''
+        同期先の rclone remote 名(`rclone config` で作ったもの)。
+        認証情報はこのモジュールの管轄外で、~/.config/rclone/rclone.conf に置かれる。
       '';
     };
 
@@ -84,6 +92,12 @@ in
         description = "同期する添付フォルダの絶対パス(Obsidian の attachmentFolderPath と一致)。既定は vault ルート直下の attachments/。";
       };
 
+      folder = lib.mkOption {
+        type = lib.types.str;
+        default = "zettelkasten-attachments";
+        description = "添付を置く Google Drive 側のフォルダ名(remote からの相対パス)。無ければ初回同期で作られる。";
+      };
+
       intervalSeconds = lib.mkOption {
         type = lib.types.ints.positive;
         default = 900;
@@ -103,6 +117,12 @@ in
         default = "${cfg.zettelkastenRoot}/references";
         defaultText = "\${zettelkastenRoot}/references";
         description = "papis ライブラリ(info.yaml と PDF が item ごとに同居)の絶対パス。既定は vault ルート直下の references/。";
+      };
+
+      folder = lib.mkOption {
+        type = lib.types.str;
+        default = "papis-library";
+        description = "papis ライブラリを置く Google Drive 側のフォルダ名(remote からの相対パス)。";
       };
 
       opentool = lib.mkOption {
@@ -167,7 +187,6 @@ in
       };
       Service = {
         Type = "oneshot";
-        Environment = [ "ZETTELKASTEN_ROOT=${cfg.zettelkastenRoot}" ];
         ExecStart = "${lib.getExe syncScript} --only attachments";
       };
     };
@@ -199,7 +218,6 @@ in
         RunAtLoad = true;
         WatchPaths = [ cfg.attachments.dir ];
         StartInterval = cfg.attachments.intervalSeconds;
-        EnvironmentVariables.ZETTELKASTEN_ROOT = cfg.zettelkastenRoot;
         StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/zettelkasten-sync.log";
         StandardOutPath = "${config.home.homeDirectory}/Library/Logs/zettelkasten-sync.log";
       };
