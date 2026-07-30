@@ -23,6 +23,8 @@ let
   attachmentsDir = "${cfg.vaultDir}/attachments";
   papisDir = "${cfg.vaultDir}/references";
 
+  anySync = cfg.attachments.enable || cfg.papis.enable;
+
   # 同期コマンドは1本。何を同期するかは eval 時にここで焼き込む(実行時に設定を読む層は無い)。
   syncScript = import ./sync-script.nix {
     inherit pkgs;
@@ -37,6 +39,15 @@ let
       if cfg.papis.enable
       then { dir = papisDir; inherit (cfg.papis) folder; }
       else null;
+  };
+
+  # 宣言的に片付かない残り(vault フォルダ・rclone の OAuth・初回同期)を進める対話 CLI。
+  # 有効な機能だけを案内するよう、components を渡す(無効な機能の手順は生成されない)。
+  setupScript = import ./setup.nix {
+    inherit pkgs;
+    inherit (cfg) vaultDir rcloneRemote;
+    seedObsidian = if cfg.obsidian.enable then seedObsidian else null;
+    syncScript = if anySync then syncScript else null;
   };
 
   mkSyncJob = import ./sync-job.nix {
@@ -195,7 +206,11 @@ in
       ];
     })
 
-    (lib.mkIf (cfg.enable && (cfg.attachments.enable || cfg.papis.enable)) {
+    (lib.mkIf cfg.enable {
+      home.packages = [ setupScript ];
+    })
+
+    (lib.mkIf (cfg.enable && anySync) {
       home.packages = [ syncScript ];
     })
 

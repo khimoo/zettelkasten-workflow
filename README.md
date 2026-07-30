@@ -1,74 +1,176 @@
 # zettelkasten-workflow
 
-Zettelkasten（Obsidian vault）を複数マシンで再現するための **Nix mechanism と Obsidian 設定**
-を切り出した public repo。**Nix さえ入っていれば**（非 NixOS・非 home-manager でも）動くことを
-目指す。ノート本文は別の private repo にあり、ここには含まれない。
+Obsidian の vault を、どのマシンでも同じ形で立ち上げるための **home-manager モジュール**。
+添付ファイルと文献 PDF の Google Drive 同期・papis（文献管理）の設定・Obsidian 本体と
+`.obsidian` 設定を、これ一つが持つ。ノート本文は別の private repo にあり、ここには含まれない。
 
-## 提供するもの
+対応環境は **home-manager**（Linux / macOS / WSL）。Windows では WSL の中で使う。
 
-- `apps.default`（`zettelkasten-bootstrap`）— 新しいマシンで使える状態になるまでの対話スクリプト。
-  vault の用意（必要なら `git init`）→ `.obsidian` の配置 → rclone の接続確認 → 同期先設定の保存 →
-  初回同期、までを順に進める。進捗ファイルは持たず、各ステップが実物（`.git` / `.obsidian` /
-  rclone remote / `.zettelkasten.json` / bisync の記録）を見て済んでいれば skip するので、
-  途中で止めても再実行すれば続きから進む。**GitHub には一切触らない** — remote との接続は各自の領分。
-- `homeManagerModules.zettelkasten` — vault 添付フォルダの rclone bisync・papis ライブラリ同期
-  （`services.zettelkasten.{attachments,papis}`）と、`.obsidian` 設定の seed-once 配置
-  （`services.zettelkasten.obsidian.enable`）を行う home-manager モジュール。
-- `apps.{sync, seed-obsidian, mirror-obsidian, obsidian}` — home-manager 非対応環境でも `nix run` で
-  同じ実体を実行できる。HM モジュールとスクリプトを共有する。`sync` は添付と papis をまとめて
-  同期する単一コマンドで、同期先（rclone remote と Drive のフォルダ名）は vault 直下の
-  `.zettelkasten.json` が持つ（clone すれば2台目にも設定がそのまま届く）。
-- `apps.obsidian` — Obsidian 本体を、配布する plugin が実行時に要求する外部コマンドごと配る
-  （`obsidian-git` → `git`、`realclaudian` → `claude`）。unfree の許可もこちら持ちなので
-  `NIXPKGS_ALLOW_UNFREE` は要らない。素の `nix run nixpkgs#obsidian` では両コマンドが PATH に
-  無く、plugin が無言で動かない。
-- `.obsidian/`（＋ `packages.obsidian-config`）— sanitize 済みの Obsidian 設定と community
-  plugin 本体。`seed-obsidian` がこれを vault に非破壊コピーする。private なパス（bookmark・
-  レイアウトに開いていたノート・`workspace.json`）は除外/空化済み。**typst plugin は配らない**
-  — WSL の Obsidian を native assertion で落とし（JS 側で catch できない）、26MB の wasm を
-  持ち込むうえ、上流が 2024 年から停滞しているため。`mirror-obsidian` も vault から持ち帰らない。
-- `mirror-obsidian`（＋ `services.zettelkasten.obsidian.mirrorRepo`）— `seed-obsidian` の逆向き。
-  vault の **tracked** `.obsidian`（＝各自の `.gitignore` が sanitize した集合）を、指定した
-  config repo（この repo 自身や fork の repo）へコピーして commit する。config の live な
-  source-of-truth は vault（`obsidian-git` が同期）で、この repo はそこからの派生スナップショット。
-  変更が溜まったら手で `mirror-obsidian` を実行して派生を更新する（`--dry-run` / `--push` あり）。
+## セットアップ
 
-この repo は rclone の認証情報を持たない。各マシンで `rclone config` が作った
-`~/.config/rclone/rclone.conf` を rclone 自身が既定で解決する。
+### 1. Nix を入れる
+
+WSL なら WSL の中に入れる（Windows 側ではない）。
+
+```sh
+sh <(curl -L https://nixos.org/nix/install) --daemon
+```
+
+flake を有効にする:
+
+```sh
+mkdir -p ~/.config/nix
+echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
+```
+
+一度ターミナルを開き直す。
+
+### 2. `~/.config/home-manager/flake.nix` を作る
+
+下の内容をそのまま貼る。**`username` と `system` の2行だけ**自分の環境に書き換える
+（`username` は `whoami` の出力）。
+
+```nix
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    home-manager = {
+      url = "github:nix-community/home-manager/release-25.11";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    zettelkasten.url = "github:khimoo/zettelkasten-workflow";
+  };
+
+  outputs = { nixpkgs, home-manager, zettelkasten, ... }:
+    let
+      # ==== ここだけ自分の環境に合わせる ====
+      username = "alice";
+      system = "x86_64-linux"; # Intel Mac は "x86_64-darwin" / Apple Silicon は "aarch64-darwin"
+      # =====================================
+
+      homeDirectory =
+        if nixpkgs.lib.hasSuffix "darwin" system
+        then "/Users/${username}"
+        else "/home/${username}";
+    in
+    {
+      homeConfigurations.${username} = home-manager.lib.homeManagerConfiguration {
+        pkgs = import nixpkgs {
+          inherit system;
+          # Obsidian と claude-code は unfree なので許可が要る。
+          config.allowUnfree = true;
+        };
+
+        modules = [
+          zettelkasten.homeManagerModules.zettelkasten
+          {
+            home = {
+              inherit username homeDirectory;
+              stateVersion = "25.11";
+            };
+
+            services.zettelkasten = {
+              enable = true;
+              vaultDir = "${homeDirectory}/zettelkasten";
+              obsidian.enable = true;
+              papis.enable = true;
+            };
+          }
+        ];
+      };
+    };
+}
+```
+
+### 3. 反映する
+
+```sh
+nix run home-manager/release-25.11 -- switch
+```
+
+初回は Obsidian などのダウンロードで時間がかかる。2回目からは `home-manager switch` で足りる。
+
+### 4. `zettelkasten-setup` を実行する
+
+```sh
+zettelkasten-setup
+```
+
+宣言的に片付かない残り——vault フォルダの作成と `git init`、Google Drive の認証
+（`rclone config` を開いて渡す）、初回同期——を順に聞く。**GitHub には一切触らない**ので、
+vault を push したければ自分で remote を足す。
+
+途中で止めても、もう一度実行すれば済んだところは飛ばす。進捗ファイルは持たず、各ステップが
+実物（`.git` / `.obsidian` / rclone remote / bisync の記録）を見て判断する。
+
+最後に残る手作業は2つ:
+
+- Obsidian を起動して vault を開く。初回だけ「このプラグインの製作者を信用しますか」を聞かれる。
+- Claude を使うプラグインを動かすなら、一度 `claude` を実行してログインする。
+
+2台目以降は、vault を clone してから 2→3→4 を同じようにやる。
+
+## 設定できること
+
+`services.zettelkasten` の options。`vaultDir` 以外は既定のままでも動く。
+
+| option | 既定 | |
+|---|---|---|
+| `enable` | `false` | モジュール全体の on/off |
+| `vaultDir` | （必須） | vault の絶対パス。直下の `attachments/` と `references/` が同期対象 |
+| `rcloneRemote` | `"gdrive"` | 同期先の rclone remote 名 |
+| `attachments.enable` | `true` | 添付フォルダの Google Drive 双方向同期 |
+| `attachments.folder` | `"zettelkasten-attachments"` | Drive 側のフォルダ名 |
+| `attachments.intervalSeconds` | `900` | 定期同期の間隔 |
+| `papis.enable` | `false` | papis 本体・設定・`references/` の同期 |
+| `papis.folder` | `"papis-library"` | Drive 側のフォルダ名 |
+| `papis.opentool` | `"xdg-open"` | `papis open` が使うビューア |
+| `obsidian.enable` | `false` | Obsidian 本体と `.obsidian` 設定の配置 |
+| `obsidian.installPackage` | `obsidian.enable` | Obsidian 本体を入れるか（別経路で入れているなら `false`） |
+| `obsidian.mirrorRepo` | `null` | `mirror-obsidian` の出力先（config を配る側だけが使う） |
+| `after` / `wants` | `[]` | 同期サービスの起動順序の依存 |
+
+vault の中のパス（`attachments/` と `references/`）は規約で固定していて、options にはしていない。
+配布する `.obsidian/app.json` の `attachmentFolderPath` と食い違わせないため。
+
+## 日常の操作
+
+同期は自動で走る（ファイルを変更したときと、取りこぼしを拾う定期実行）。手で走らせるなら:
+
+```sh
+zettelkasten-sync              # 設定どおり全部
+zettelkasten-sync --only papis # papis だけ
+zettelkasten-sync --dry-run    # 以降の引数は rclone bisync へ素通し
+```
+
+同期先は home-manager の options が持っていて、引数では変えられない。
+
+**「このマシンには同期の記録が無いのに Drive 側にはデータがある」** と言われて止まったときは、
+記録の喪失か、既存の Drive に新しいマシンを合流させようとしているかのどちらか。中身を確認して、
+合流させる場合だけ `ZK_FORCE_RESYNC=1 zettelkasten-sync --resync` を実行する。
+
+## Obsidian 設定を配る側へ
+
+`.obsidian/` と `packages.obsidian-config` に、sanitize 済みの Obsidian 設定と community plugin
+本体が入っている。private なパス（bookmark・開いていたノート・`workspace.json`）は除外/空化済み。
+
+- `seed-obsidian` — この設定を vault へ非破壊コピーする。`obsidian.enable` のとき
+  home-manager の activation が呼ぶ。vault に `.obsidian` が既にあれば何もしない。
+- `mirror-obsidian` — 逆向き。vault の **tracked** な `.obsidian` を config repo へ写して commit する
+  （`--dry-run` / `--push` あり）。live な source-of-truth は vault（`obsidian-git` が同期している）で、
+  この repo はそこからの派生スナップショット。`obsidian.mirrorRepo` を設定すると PATH に載る。
+
+配布時に落としているもの:
+
+- **typst plugin** — WSL の Obsidian を native assertion で落とす（JS 側で catch できない）。
+  26MB の wasm を持ち込むうえ、上流が 2024 年から停滞している。
+- **`obsidian-git` の `autoPullOnBoot`** — remote を持たない vault では起動ごとに git のエラー通知が出るため。
 
 ## なぜ mechanism を分離したか
 
 元は private な vault repo に同居していた。flake の input として `git+ssh` で取得すると
-**評価時に SSH 鍵が必須**になり、「鍵ゼロからの環境復元」を阻む。mechanism を public 化し
+**評価時に SSH 鍵が必須**になり、「鍵ゼロからの環境復元」を阻む。mechanism を public 化して
 `github:` で取得することで、消費側 flake の eval が SSH 鍵に依存しなくなる。
 
-## 消費側
-
-home-manager / NixOS から（flake input として取り込む）:
-
-```nix
-inputs.zettelkasten.url = "github:khimoo/zettelkasten-workflow";
-# services.zettelkasten.enable = true; obsidian.enable = true; zettelkastenRoot = "…";
-```
-
-Nix さえあれば（非 NixOS・非 home-manager）、まずこれ一つ:
-
-```sh
-nix run github:khimoo/zettelkasten-workflow
-```
-
-既に vault がある場合（2台目など）は clone してから同じコマンドを実行する。設定ファイル
-（`.zettelkasten.json`）は vault に入っているので、聞かれる内容は既定値のまま Enter で済む。
-
-個別に実行したいときは:
-
-```sh
-# vault に .obsidian(設定 + plugin)を配置。既存があれば非破壊で skip。
-nix run github:khimoo/zettelkasten-workflow#seed-obsidian -- /path/to/vault
-# Obsidian を起動(git と claude を PATH に載せた状態で)
-nix run github:khimoo/zettelkasten-workflow#obsidian
-# 添付と papis の同期をワンショット実行(vault の中で実行するか、パスを渡す)
-nix run github:khimoo/zettelkasten-workflow#sync -- /path/to/vault
-# vault の tracked .obsidian を config repo へミラーして commit(fork は自分の dest を渡す)
-nix run github:khimoo/zettelkasten-workflow#mirror-obsidian -- /path/to/vault /path/to/config-repo
-```
+この repo は rclone の認証情報を持たない。各マシンで `rclone config` が作った
+`~/.config/rclone/rclone.conf` を、rclone 自身が既定で解決する。

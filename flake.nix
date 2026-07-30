@@ -16,7 +16,8 @@
   # 提供物:
   #   homeManagerModules.zettelkasten … 統合 HM モジュール services.zettelkasten。
   #     添付 watcher と papis(設定 + ライブラリ同期 watcher)を常駐管理し、Obsidian 設定を seed し、
-  #     同期コマンドを PATH に載せる。これがこの flake の唯一の公開面。
+  #     同期コマンド(zettelkasten-sync)と、宣言的に片付かない残りを進める対話 CLI
+  #     (zettelkasten-setup)を PATH に載せる。これがこの flake の唯一の公開面。
   #   packages … options に依存しない部品。開発時に単体で `nix build` して検証するためのもので、
   #     利用者が直接触ることは想定しない。
   outputs = { self, nixpkgs }:
