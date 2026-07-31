@@ -14,7 +14,7 @@
   # `nix run` 用の apps は持たない——同期コマンドは options の値を焼き込んで module が生成する。
   #
   # 提供物:
-  #   homeManagerModules.zettelkasten … 統合 HM モジュール services.zettelkasten。
+  #   homeModules.zettelkasten … 統合 HM モジュール services.zettelkasten。
   #     添付 watcher と papis(設定 + ライブラリ同期 watcher)を常駐管理し、Obsidian 設定を seed し、
   #     同期コマンド(zettelkasten-sync)と、宣言的に片付かない残りを進める対話 CLI
   #     (zettelkasten-setup)を PATH に載せる。これがこの flake の唯一の公開面。
@@ -49,8 +49,8 @@
       };
     in
     {
-      homeManagerModules.zettelkasten = import ./nix/hm-module.nix;
-      homeManagerModules.default = self.homeManagerModules.zettelkasten;
+      homeModules.zettelkasten = import ./nix/hm-module.nix;
+      homeModules.default = self.homeModules.zettelkasten;
 
       packages = forAllSystems (system: {
         seed-obsidian = seedObsidianFor system;
@@ -59,5 +59,7 @@
         obsidian-config = obsidianConfigFor system;
         obsidian = obsidianFor system;
       });
+
+      formatter = forAllSystems (system: nixpkgs.legacyPackages.${system}.nixpkgs-fmt);
     };
 }

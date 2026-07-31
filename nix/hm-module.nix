@@ -204,7 +204,8 @@ in
         description = ''
           vault の tracked .obsidian をミラーする config repo の checkout 絶対パス。
           null(既定)なら PATH に何も載せない。非 null かつ obsidian.enable のとき
-          mirror-obsidian を PATH に載せる。config を配る側(owner や fork 主)だけが使う。
+          mirror-obsidian を PATH に載せる。自分の .obsidian を config repo として配る側だけが
+          使うもので、配られた設定を使うだけなら null のままでよい。
         '';
       };
     };

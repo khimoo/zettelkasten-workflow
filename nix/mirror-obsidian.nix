@@ -6,10 +6,12 @@
 # seed-obsidian が public→vault の配布なのに対し、mirror-obsidian は vault→public の逆向き。
 #
 # 依存性逆転: source(vault)と dest(config repo)は引数/環境変数で受け取り、owner をハードコード
-# しない——fork した第三者は自分の dest を渡すだけで同じ機構を使える。
+# しない。自分の config を配りたい人は自分の vault と dest を渡すだけでよい。
 #
-# sanitize = vault の .gitignore。ミラー対象は `git ls-files .obsidian`(vault が tracked にした
-# 集合)だけなので、workspace.json や token を持つ data.json 等は各自の gitignore が除外する。
+# sanitize は 2 段ある。1 段目は vault の .gitignore——ミラー対象は `git ls-files .obsidian`
+# (vault が tracked にした集合)だけなので、workspace.json や token を持つ data.json は各自の
+# gitignore が除外する。2 段目がこの層で、vault では tracked にしたいが配ってはいけないもの
+# (個人の作業状態・excludedPlugins)を落とす。
 # tracked が空なら誤って dest の設定を消さないよう中止する(安全策)。
 #
 # excludedPlugins は「vault では使うが配らない」プラグイン。vault 側の .gitignore では表現できない
@@ -102,6 +104,14 @@ pkgs.writeShellApplication {
     tmp="$(mktemp -d)"
     trap 'rm -rf "$tmp"' EXIT
     ( cd "$vault" && cp --parents -p -- "''${tracked[@]}" "$tmp/" )
+
+    # ---- 個人の作業状態を落とす ----
+    # bookmarks.json と workspaces.json は自分のノートへの参照を持ちうる。vault 側で untrack すると
+    # マシン間で同期されなくなるので、vault では tracked のままにして配布の境界で落とす。
+    # excludedPlugins と違い環境依存の判断ではない(Obsidian の仕様)ため option にしない。
+    for state in bookmarks.json workspaces.json; do
+      rm -f "$tmp/.obsidian/$state"
+    done
 
     # ---- 配らないプラグインを落とす(本体と community-plugins.json の id の両方から) ----
     excluded=(${pkgs.lib.escapeShellArgs excludedPlugins})

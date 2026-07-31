@@ -62,7 +62,7 @@ echo 'experimental-features = nix-command flakes' >> ~/.config/nix/nix.conf
         };
 
         modules = [
-          zettelkasten.homeManagerModules.zettelkasten
+          zettelkasten.homeModules.zettelkasten
           {
             home = {
               inherit username homeDirectory;
@@ -160,7 +160,7 @@ zettelkasten-sync --dry-run    # 以降の引数は rclone bisync へ素通し
 ## Obsidian 設定を配る側へ
 
 `.obsidian/` と `packages.obsidian-config` に、sanitize 済みの Obsidian 設定と community plugin
-本体が入っている。private なパス（bookmark・開いていたノート・`workspace.json`）は除外/空化済み。
+本体が入っている。
 
 - `seed-obsidian` — この設定を vault へ非破壊コピーする。`obsidian.enable` のとき
   home-manager の activation が呼ぶ。vault に `.obsidian` が既にあれば何もしない。
@@ -168,11 +168,31 @@ zettelkasten-sync --dry-run    # 以降の引数は rclone bisync へ素通し
   （`--dry-run` / `--push` あり）。live な source-of-truth は vault（`obsidian-git` が同期している）で、
   この repo はそこからの派生スナップショット。`obsidian.mirrorRepo` を設定すると PATH に載る。
 
-配布時に落としているもの:
+### sanitize は 2 段
 
+1. **vault の `.gitignore`** — ミラー対象は `git ls-files .obsidian` の集合だけなので、
+   `workspace.json` やトークンを持つ `data.json` は vault 側の gitignore が除外する。
+2. **`mirror-obsidian`（配布の境界）** — vault では tracked にしたいが配ってはいけないものを落とす。
+
+2 で落としているもの:
+
+- **`bookmarks.json` / `workspaces.json`** — 自分のノートへの参照と名前付きレイアウトを持つ。
+  vault 側で untrack するとマシン間で同期されなくなるので、vault では tracked のままにして
+  配布の境界で落とす。
 - **typst plugin** — WSL の Obsidian を native assertion で落とす（JS 側で catch できない）。
-  26MB の wasm を持ち込むうえ、上流が 2024 年から停滞している。
+  26MB の wasm を持ち込むうえ、上流が 2024 年から停滞している。プラグイン本体と
+  `community-plugins.json` の id の両方から除く。
 - **`obsidian-git` の `autoPullOnBoot`** — remote を持たない vault では起動ごとに git のエラー通知が出るため。
+
+### いつ mirror するか
+
+**新しいマシンを立てるときではない。** ノートの private repo を clone する運用なら、その clone が
+`.obsidian` を連れてくるので `seed-obsidian` は skip する（既存を上書きしない設計）。
+このスナップショットが効くのは `.obsidian` を持たない vault——`initializeVault = true` で
+ゼロから始める環境である。
+
+したがって mirror の契機は「設定を変えて、配る版にも反映したくなったとき」だけ。反映は消費側が
+`nix flake update` して初めて届く（input は `flake.lock` に pin されている）。
 
 ## なぜ mechanism を分離したか
 
