@@ -1,41 +1,49 @@
-# vault の tracked .obsidian を別リポジトリ(config repo)へミラーして commit する。
+# vault の骨格を config repo の skeleton/ へミラーして commit する。
 # home-manager(PATH)と `nix run`(ワンショット)が共有する 1 本のスクリプト。
 #
-# 責務: config の source-of-truth は vault(ノートの private repo。obsidian-git が live 同期する)。
-# 共有/public repo はそこからの派生スナップショットで、このスクリプトが「たまに手動で」更新する。
-# seed-obsidian が public→vault の配布なのに対し、mirror-obsidian は vault→public の逆向き。
+# 責務: 骨格の source-of-truth は vault(ノートの private repo。obsidian-git が live 同期する)。
+# public repo はそこからの派生スナップショットで、このスクリプトが「たまに手動で」更新する。
+# seed-vault が public→vault の配布なのに対し、mirror-vault は vault→public の逆向き。
 #
 # 依存性逆転: source(vault)と dest(config repo)は引数/環境変数で受け取り、owner をハードコード
-# しない。自分の config を配りたい人は自分の vault と dest を渡すだけでよい。
+# しない。自分の骨格を配りたい人は自分の vault と dest を渡すだけでよい。
 #
-# sanitize は 2 段ある。1 段目は vault の .gitignore——ミラー対象は `git ls-files .obsidian`
-# (vault が tracked にした集合)だけなので、workspace.json や token を持つ data.json は各自の
-# gitignore が除外する。2 段目がこの層で、vault では tracked にしたいが配ってはいけないもの
-# (個人の作業状態・excludedPlugins)を落とす。
-# tracked が空なら誤って dest の設定を消さないよう中止する(安全策)。
+# 運ぶ物は2種類あり、選び方が逆になる:
+#
+#   .obsidian … denylist。`git ls-files .obsidian`(vault が tracked にした集合)を取り、そこから
+#     配ってはいけないものを引く。Obsidian が勝手に増やすファイルに追随する必要があるため、
+#     列挙しない側に倒す。1段目の sanitize は vault の .gitignore が担い(workspace.json や
+#     token を持つ data.json はそこで除外済み)、2段目がこの層。
+#
+#   骨格(分類フォルダ・運用ドキュメント) … allowlist(nix/skeleton-paths.nix)。vault が tracked に
+#     しているものの大半は個人のノート(Zettel/ Dailies/ Goals/ …)なので、全 tracked を写すと
+#     private が public へ流れ込む。足し忘れが「漏れる」方向に倒れるので、配ると決めたものを
+#     列挙する側に倒す。列挙のどれかが vault に無ければ中止する——黙って落とすと、直後の
+#     rsync --delete が repo 側からも消してしまう。
 #
 # excludedPlugins は「vault では使うが配らない」プラグイン。vault 側の .gitignore では表現できない
 # (vault は自分用に tracked にしている)ので、配布の境界であるこの層で落とす。プラグイン本体と
 # community-plugins.json の id の両方から除く——本体だけ消すと Obsidian が不在のプラグインを
 # 読もうとする。同じ理由で obsidian-git の autoPullOnBoot も配布時だけ false にする。
 { pkgs
+, skeletonPaths
 , # typst: 26MB の wasm を持ち込むうえ、WSL の Obsidian を native assertion で落とす
   # (JS 側で catch できない)。上流は 2024 年から停滞。
   excludedPlugins ? [ "typst" ]
 }:
 
 pkgs.writeShellApplication {
-  name = "mirror-obsidian";
+  name = "mirror-vault";
   runtimeInputs = [ pkgs.coreutils pkgs.git pkgs.rsync pkgs.jq ];
   text = ''
-    err() { echo "mirror-obsidian: $*" >&2; }
+    err() { echo "mirror-vault: $*" >&2; }
 
     show_help() {
-      echo "mirror-obsidian: vault の tracked .obsidian を config repo へミラーして commit する。" >&2
+      echo "mirror-vault: vault の骨格を config repo の skeleton/ へミラーして commit する。" >&2
       echo "" >&2
-      echo "usage: mirror-obsidian [--dry-run] [--push] [VAULT] [DEST]" >&2
+      echo "usage: mirror-vault [--dry-run] [--push] [VAULT] [DEST]" >&2
       echo "  VAULT  vault(ノート private repo の clone)の絶対パス(省略時 ZETTELKASTEN_ROOT)" >&2
-      echo "  DEST   ミラー先 config repo の checkout 絶対パス(省略時 OBSIDIAN_CONFIG_REPO)" >&2
+      echo "  DEST   ミラー先 config repo の checkout 絶対パス(省略時 ZETTELKASTEN_CONFIG_REPO)" >&2
       echo "  --dry-run  commit せず差分のみ表示する" >&2
       echo "  --push     commit 後に push する(既定は push しない=人間ゲート)" >&2
     }
@@ -56,7 +64,7 @@ pkgs.writeShellApplication {
     done
 
     vault="''${positional[0]:-''${ZETTELKASTEN_ROOT:-}}"
-    dest="''${positional[1]:-''${OBSIDIAN_CONFIG_REPO:-}}"
+    dest="''${positional[1]:-''${ZETTELKASTEN_CONFIG_REPO:-}}"
 
     # ---- preflight: 宣言的に用意できない前提(clone の有無・git repo か)を loud に落とす ----
     if [ -z "$vault" ]; then
@@ -74,13 +82,13 @@ pkgs.writeShellApplication {
     fi
     if [ ! -d "$vault/.obsidian" ]; then
       err "vault に .obsidian がありません: $vault/.obsidian"
-      err "  → Obsidian か seed-obsidian で設定を用意してから実行してください。"
+      err "  → Obsidian か seed-vault で設定を用意してから実行してください。"
       exit 1
     fi
 
     if [ -z "$dest" ]; then
       err "ミラー先 config repo が未指定です。"
-      err "  → 第2引数か環境変数 OBSIDIAN_CONFIG_REPO で dest(絶対パス)を渡してください。"
+      err "  → 第2引数か環境変数 ZETTELKASTEN_CONFIG_REPO で dest(絶対パス)を渡してください。"
       exit 1
     fi
     if [ ! -d "$dest" ]; then
@@ -92,20 +100,19 @@ pkgs.writeShellApplication {
       exit 1
     fi
 
-    # ---- ミラー対象 = vault が tracked にした .obsidian(sanitize は vault の .gitignore が担う) ----
+    # 望ましい状態を tmp に組み立てる。dest には直接触れずここから反映する。
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+
+    # ---- .obsidian(denylist) ----
     mapfile -d "" tracked < <(git -C "$vault" ls-files -z -- .obsidian)
     if [ "''${#tracked[@]}" -eq 0 ]; then
       err ".obsidian が vault で git tracked ではありません。ミラーを中止します。"
       err "  → 誤って dest の設定を消さないための安全策です。vault 側で .obsidian を add してください。"
       exit 1
     fi
-
-    # 望ましい状態(tracked 集合)を tmp に組み立てる。dest には直接触れずここから反映する。
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
     ( cd "$vault" && cp --parents -p -- "''${tracked[@]}" "$tmp/" )
 
-    # ---- 個人の作業状態を落とす ----
     # bookmarks.json と workspaces.json は自分のノートへの参照を持ちうる。vault 側で untrack すると
     # マシン間で同期されなくなるので、vault では tracked のままにして配布の境界で落とす。
     # excludedPlugins と違い環境依存の判断ではない(Obsidian の仕様)ため option にしない。
@@ -113,7 +120,6 @@ pkgs.writeShellApplication {
       rm -f "$tmp/.obsidian/$state"
     done
 
-    # ---- 配らないプラグインを落とす(本体と community-plugins.json の id の両方から) ----
     excluded=(${pkgs.lib.escapeShellArgs excludedPlugins})
     for plugin in "''${excluded[@]}"; do
       rm -rf "$tmp/.obsidian/plugins/$plugin"
@@ -134,26 +140,48 @@ pkgs.writeShellApplication {
       mv "$git_json.new" "$git_json"
     fi
 
+    # ---- 骨格(allowlist) ----
+    files=(${pkgs.lib.escapeShellArgs skeletonPaths.files})
+    missing=()
+    for rel in "''${files[@]}"; do
+      [ -f "$vault/$rel" ] || missing+=("$rel")
+    done
+    if [ "''${#missing[@]}" -gt 0 ]; then
+      err "配布対象が vault にありません。ミラーを中止します:"
+      for rel in "''${missing[@]}"; do err "  - $rel"; done
+      err "  → vault 側で用意するか、nix/skeleton-paths.nix から外してください。"
+      err "    (黙って落とすと dest からも消えるため、ここで止めています。)"
+      exit 1
+    fi
+    ( cd "$vault" && cp --parents -p -- "''${files[@]}" "$tmp/" )
+
+    # 空フォルダは git に載らないので .gitkeep で保持する。中身は各自のノートなので運ばない。
+    dirs=(${pkgs.lib.escapeShellArgs skeletonPaths.dirs})
+    for rel in "''${dirs[@]}"; do
+      mkdir -p "$tmp/$rel"
+      : > "$tmp/$rel/.gitkeep"
+    done
+
     if [ "$dry_run" -eq 1 ]; then
-      err "--dry-run: $vault/.obsidian → $dest/.obsidian の差分"
-      if git --no-pager diff --no-index --stat -- "$dest/.obsidian" "$tmp/.obsidian"; then
+      err "--dry-run: $vault → $dest/skeleton の差分"
+      if git --no-pager diff --no-index --stat -- "$dest/skeleton" "$tmp"; then
         err "(差分なし)"
       fi
       exit 0
     fi
 
-    # dest/.obsidian を tmp の内容に一致させる(--delete で tracked から外れたファイルの削除も伝播)。
-    rsync -a --delete "$tmp/.obsidian/" "$dest/.obsidian/"
+    # dest/skeleton を tmp の内容に一致させる(--delete で対象から外れたファイルの削除も伝播)。
+    rsync -a --delete "$tmp/" "$dest/skeleton/"
 
-    # .obsidian パスだけを stage/commit する。dest に別途 stage 済みの変更(flake 等)は巻き込まない。
-    git -C "$dest" add -A -- .obsidian
-    if git -C "$dest" diff --cached --quiet -- .obsidian; then
+    # skeleton パスだけを stage/commit する。dest に別途 stage 済みの変更(flake 等)は巻き込まない。
+    git -C "$dest" add -A -- skeleton
+    if git -C "$dest" diff --cached --quiet -- skeleton; then
       err "差分なし。commit しません。"
       exit 0
     fi
 
     vault_rev="$(git -C "$vault" rev-parse --short HEAD 2>/dev/null || echo unknown)"
-    git -C "$dest" commit -q -m "obsidian: mirror .obsidian from vault @ $vault_rev" -- .obsidian
+    git -C "$dest" commit -q -m "skeleton: mirror vault skeleton @ $vault_rev" -- skeleton
     err "commit しました: $dest"
     git -C "$dest" --no-pager show --stat --oneline HEAD >&2 || true
 

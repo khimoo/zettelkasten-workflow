@@ -15,7 +15,7 @@
   #
   # 提供物:
   #   homeModules.zettelkasten … 統合 HM モジュール services.zettelkasten。
-  #     添付 watcher と papis(設定 + ライブラリ同期 watcher)を常駐管理し、Obsidian 設定を seed し、
+  #     添付 watcher と papis(設定 + ライブラリ同期 watcher)を常駐管理し、vault の骨格を seed し、
   #     同期コマンド(zettelkasten-sync)と、宣言的に片付かない残りを進める対話 CLI
   #     (zettelkasten-setup)を PATH に載せる。これがこの flake の唯一の公開面。
   #   packages … options に依存しない部品。開発時に単体で `nix build` して検証するためのもので、
@@ -25,15 +25,16 @@
       systems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
       forAllSystems = nixpkgs.lib.genAttrs systems;
 
-      obsidianConfigFor = system: import ./nix/obsidian-config.nix {
+      skeletonFor = system: import ./nix/skeleton.nix {
         pkgs = nixpkgs.legacyPackages.${system};
       };
-      seedObsidianFor = system: import ./nix/seed-obsidian.nix {
+      seedVaultFor = system: import ./nix/seed-vault.nix {
         pkgs = nixpkgs.legacyPackages.${system};
-        obsidianConfig = obsidianConfigFor system;
+        skeleton = skeletonFor system;
       };
-      mirrorObsidianFor = system: import ./nix/mirror-obsidian.nix {
+      mirrorVaultFor = system: import ./nix/mirror-vault.nix {
         pkgs = nixpkgs.legacyPackages.${system};
+        skeletonPaths = import ./nix/skeleton-paths.nix;
       };
       initVaultFor = system: import ./nix/init-vault.nix {
         pkgs = nixpkgs.legacyPackages.${system};
@@ -53,10 +54,10 @@
       homeModules.default = self.homeModules.zettelkasten;
 
       packages = forAllSystems (system: {
-        seed-obsidian = seedObsidianFor system;
+        seed-vault = seedVaultFor system;
         init-vault = initVaultFor system;
-        mirror-obsidian = mirrorObsidianFor system;
-        obsidian-config = obsidianConfigFor system;
+        mirror-vault = mirrorVaultFor system;
+        vault-skeleton = skeletonFor system;
         obsidian = obsidianFor system;
       });
 

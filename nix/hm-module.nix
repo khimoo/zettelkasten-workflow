@@ -57,26 +57,29 @@ let
   # vault フォルダ自体を用意する(initializeVault のときだけ activation が呼ぶ)。
   initVault = import ./init-vault.nix { inherit pkgs; };
 
-  # vault へ .obsidian を非破壊コピーする(既に .obsidian があれば何もしない)。
-  seedObsidian = import ./seed-obsidian.nix {
+  # vault へ骨格(分類フォルダ・運用ドキュメント・.obsidian)を非破壊コピーする。
+  seedVault = import ./seed-vault.nix {
     inherit pkgs;
-    obsidianConfig = import ./obsidian-config.nix { inherit pkgs; };
+    skeleton = import ./skeleton.nix { inherit pkgs; };
   };
 
   # 配布する plugin が実行時に要求する外部コマンド(git / claude)ごと Obsidian を包む。
   obsidianPackage = import ./obsidian.nix { inherit pkgs; };
 
-  # vault の tracked .obsidian を config repo へミラーする(seed の逆向き)。
+  # vault の骨格を config repo へミラーする(seed の逆向き)。
   # vault と dest を env 既定として焼き込む(--set-default なので引数/env が優先)。
-  mirrorObsidian = import ./mirror-obsidian.nix { inherit pkgs; };
-  mirrorObsidianWrapped = pkgs.symlinkJoin {
-    name = "mirror-obsidian-wrapped";
-    paths = [ mirrorObsidian ];
+  mirrorVault = import ./mirror-vault.nix {
+    inherit pkgs;
+    skeletonPaths = import ./skeleton-paths.nix;
+  };
+  mirrorVaultWrapped = pkgs.symlinkJoin {
+    name = "mirror-vault-wrapped";
+    paths = [ mirrorVault ];
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
-      wrapProgram $out/bin/mirror-obsidian \
+      wrapProgram $out/bin/mirror-vault \
         --set-default ZETTELKASTEN_ROOT ${lib.escapeShellArg cfg.vaultDir} \
-        --set-default OBSIDIAN_CONFIG_REPO ${lib.escapeShellArg (toString cfg.obsidian.mirrorRepo)}
+        --set-default ZETTELKASTEN_CONFIG_REPO ${lib.escapeShellArg (toString cfg.mirrorRepo)}
     '';
   };
 in
@@ -197,17 +200,18 @@ in
         '';
       };
 
-      mirrorRepo = lib.mkOption {
-        type = lib.types.nullOr lib.types.str;
-        default = null;
-        example = "/home/alice/zettelkasten-config";
-        description = ''
-          vault の tracked .obsidian をミラーする config repo の checkout 絶対パス。
-          null(既定)なら PATH に何も載せない。非 null かつ obsidian.enable のとき
-          mirror-obsidian を PATH に載せる。自分の .obsidian を config repo として配る側だけが
-          使うもので、配られた設定を使うだけなら null のままでよい。
-        '';
-      };
+    };
+
+    mirrorRepo = lib.mkOption {
+      type = lib.types.nullOr lib.types.str;
+      default = null;
+      example = "/home/alice/zettelkasten-workflow";
+      description = ''
+        vault の骨格をミラーする config repo の checkout 絶対パス。
+        null(既定)なら PATH に何も載せない。非 null のとき mirror-vault を PATH に載せる。
+        自分の vault を骨格として配る側だけが使うもので、配られた骨格を使うだけなら
+        null のままでよい。
+      '';
     };
   };
 
@@ -268,11 +272,13 @@ in
       };
     })
 
-    (lib.mkIf (cfg.enable && cfg.obsidian.enable) {
-      # zettelkastenVault が無い構成(initializeVault = false)でも、存在しない entry 名は
-      # 依存として無視されるだけなので、そのまま書ける。
-      home.activation.seedObsidian = lib.hm.dag.entryAfter [ "linkGeneration" "zettelkastenVault" ] ''
-        $DRY_RUN_CMD ${lib.getExe seedObsidian} ${lib.escapeShellArg cfg.vaultDir}
+    # 骨格は Obsidian の有無に関わらず配る(vault の中身であって Obsidian の設定ではない)。
+    # .obsidian だけは obsidian.enable のときに --obsidian で足す。
+    # zettelkastenVault が無い構成(initializeVault = false)でも、存在しない entry 名は
+    # 依存として無視されるだけなので、そのまま書ける。
+    (lib.mkIf cfg.enable {
+      home.activation.seedVault = lib.hm.dag.entryAfter [ "linkGeneration" "zettelkastenVault" ] ''
+        $DRY_RUN_CMD ${lib.getExe seedVault} ${lib.optionalString cfg.obsidian.enable "--obsidian "}${lib.escapeShellArg cfg.vaultDir}
       '';
     })
 
@@ -280,9 +286,9 @@ in
       home.packages = [ obsidianPackage ];
     })
 
-    # config を共有 repo へ手動ミラーするための CLI。常駐はしない(たまに手で実行する)。
-    (lib.mkIf (cfg.enable && cfg.obsidian.enable && cfg.obsidian.mirrorRepo != null) {
-      home.packages = [ mirrorObsidianWrapped ];
+    # 骨格を共有 repo へ手動ミラーするための CLI。常駐はしない(たまに手で実行する)。
+    (lib.mkIf (cfg.enable && cfg.mirrorRepo != null) {
+      home.packages = [ mirrorVaultWrapped ];
     })
   ];
 }
