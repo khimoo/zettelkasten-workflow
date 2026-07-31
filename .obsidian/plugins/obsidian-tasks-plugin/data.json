@@ -1,6 +1,6 @@
 {
   "presets": {},
-  "globalQuery": "(NOT(tags include daily)) AND (NOT(tags include sentence_english)) AND (NOT(tags include proof_task)) AND (NOT(tags include 車)) AND (priority is above lowest)",
+  "globalQuery": "(NOT(tags include daily)) AND (NOT(tags include sentence_english)) AND (NOT(tags include proof_task)) AND (NOT(tags include 車)) AND (NOT(path includes Reading/)) AND (priority is above lowest)",
   "globalFilter": "",
   "removeGlobalFilter": false,
   "taskFormat": "tasksPluginEmoji",
