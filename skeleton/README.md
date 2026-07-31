@@ -86,7 +86,9 @@ Google Drive へ同期する。後述）。
 
 1. **単一の箱**：分野ごとに箱を分けず、生涯ひとつの Zettelkasten を育てる。
 2. **カテゴリで分類しない**：フォルダやタグをトップダウンの分類体系にしない。
-3. **原子性**：1ノートは単独で完結した1つの考え。
+3. **原子性**：1ノートは単独で完結した1つの考え。正確には**1つの knowledge building
+   block**（Concept／Argument／Counter-argument／Model／Hypothesis・Theory／Empirical
+   observation のどれか一つ）で、object を主題にすること自体は失格ではない。[^1]
 4. **接続性**：関連は**リンク**で表す。連想でつなぐことに意味がある。
 5. **写経しない**（collector's fallacy）：資料を丸写しせず、**自分の言葉で作り直す**。
 6. **溜まったら束ねる**：ノートが増えたら構造ノートを作る。タグは主軸にしない
@@ -217,3 +219,5 @@ Obsidian Git の "Create backup" コマンドを実行 → `vault backup: <日�
 仕組みは zettelkasten-workflow を参照。
 
 `.obsidian/workspace*.json` は環境依存のため git 管理外（`.gitignore`）。
+
+[^1]: https://zettelkasten.de/atomicity/guide/ — 原文: "In short, it is about putting one idea and one idea only on a note." / "Concepts define a specific part of the world. You draw a boundary and say, 'This is X.' Arguments transfer the truth of a set of statements to another via a logical structure. Counter-arguments disrupt the transfer of truth provided by arguments. Models relate entities to each other and provide part-to-part relationships and part-to-whole relationships, often to map a part of reality or a fictional reality. Hypotheses and theories formulate statements on how reality actually is. Empirical observations are results of sensory probing on how reality actually is."

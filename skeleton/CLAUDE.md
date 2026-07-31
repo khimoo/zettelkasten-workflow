@@ -47,6 +47,11 @@
 - **間違い**: 調査対象の外部リポジトリに結果ファイルの作成・計画ファイルのチェックボックス更新を提案した。
 - **訂正ルール**: **Vault外は既定で読み取り専用**。Vault外への書き込みは毎回、対象と内容を示して明示の許可を得る。調査結果はチャットに出力し、転記はユーザーが行う。
 
+### 2026-08-01: objectはzettelにできないと誤断した／atomicityを緩い版で判定した
+- **間違い**: 「Nix」「WSL」のようなobjectは zettel にならない、と結論し、その根拠に object-tags 記事（=タグ運用のルール）を援用した。実際には(1)タグのルールと zettel 可否に論理的関係は無く、(2)atomicity は Concept（"This is X" と境界を引く定義）を正当な building block として認めるので、objectを主題にした単一ノートは zettel になり得る。原因は、CLAUDE.md内で隣接する「topic tag」「仕様書の転写」教訓のobject語彙を混同し、さらに atomicity を「主張(命題)になっているか」という緩い版で判定したこと。ガイド自身がこの緩い版を "illusion of understanding" と呼んでいる。
+- **訂正ルール**: zettel資格の atomicity 判定は「主張になっているか」ではなく **「6つの knowledge building block のどれか一つに収まるか」** で行う。6種 = Concept（"This is X" の定義）/ Argument / Counter-argument / Model / Hypothesis・Theory / Empirical observation。**objectを主題にすること自体は失格理由にならない**。失格になるのは、複数の building block を詰めた/対象の記述を写した「トピックの入れ物」になっているとき（＝atomicity違反）であって、object性ではない。タグのルール（object tagのみ）を zettel 可否の根拠に使わない。
+- **出典**: https://zettelkasten.de/atomicity/guide/ （building blocksの定義・"illusion of understanding"）
+
 ## AI生成ノートの運用ルール（再調査ワークフロー）
 
 Zettelkastenは手動で書くことに意味がある。AIが書いたノートは「人間が再調査するまで下書き」として扱う。AIが知識ノート（`Zettel/` など）を新規作成、または実質的に執筆した場合は必ず:
