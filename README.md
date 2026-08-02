@@ -193,10 +193,9 @@ zettelkasten-sync --dry-run    # 以降の引数は rclone bisync へ素通し
 - **`bookmarks.json` / `workspaces.json`** — 自分のノートへの参照と名前付きレイアウトを持つ。
   vault 側で untrack するとマシン間で同期されなくなるので、vault では tracked のままにして
   配布の境界で落とす。
-- **typst plugin** — WSL の Obsidian を native assertion で落とす（JS 側で catch できない）。
-  26MB の wasm を持ち込むうえ、上流が 2024 年から停滞している。プラグイン本体と
-  `community-plugins.json` の id の両方から除く。配布するドキュメントも「typst プラグインを
-  入れていれば typst 記法、無ければ LaTeX 記法」と条件付きで書いてある。
+- **Typst Mate の `*.wasm`** — 34MB あり、版が上がるたび履歴に blob が積まれる。プラグイン本体は
+  配る。起動時に wasm の不在を見て、`manifest.json` の版に一致する release asset を自分で
+  取り直すので、受け取り側の手作業は増えない（初回だけダウンロードが走る）。
 - **`obsidian-git` の `autoPullOnBoot`** — remote を持たない vault では起動ごとに git のエラー通知が出るため。
 
 骨格の方は逆で、vault が tracked にしているものの大半（`Zettel/` `Dailies/` `Goals/` …）が個人の

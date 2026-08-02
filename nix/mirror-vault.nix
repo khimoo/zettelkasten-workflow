@@ -21,15 +21,15 @@
 #     列挙する側に倒す。列挙のどれかが vault に無ければ中止する——黙って落とすと、直後の
 #     rsync --delete が repo 側からも消してしまう。
 #
-# excludedPlugins は「vault では使うが配らない」プラグイン。vault 側の .gitignore では表現できない
-# (vault は自分用に tracked にしている)ので、配布の境界であるこの層で落とす。プラグイン本体と
-# community-plugins.json の id の両方から除く——本体だけ消すと Obsidian が不在のプラグインを
-# 読もうとする。同じ理由で obsidian-git の autoPullOnBoot も配布時だけ false にする。
+# excludedObsidianGlobs は「vault では tracked だが配らない」ファイル。vault 側の .gitignore では
+# 表現できない(vault は自分用に tracked にしている)ので、配布の境界であるこの層で落とす。
+# 同じ理由で obsidian-git の autoPullOnBoot も配布時だけ false にする。
 { pkgs
 , skeletonPaths
-, # typst: 26MB の wasm を持ち込むうえ、WSL の Obsidian を native assertion で落とす
-  # (JS 側で catch できない)。上流は 2024 年から停滞。
-  excludedPlugins ? [ "typst" ]
+, # typst-mate は 34MB の wasm を同梱する。版が上がるたび public repo の履歴に 34MB の blob が
+  # 積まれるので配らない。プラグインは起動時に wasm の不在を見て manifest.json の版に一致する
+  # release asset を自分で取り直すため(main.js の onload)、受け取り側の手作業は増えない。
+  excludedObsidianGlobs ? [ ".obsidian/plugins/typst-mate/*.wasm" ]
 }:
 
 pkgs.writeShellApplication {
@@ -120,17 +120,10 @@ pkgs.writeShellApplication {
       rm -f "$tmp/.obsidian/$state"
     done
 
-    excluded=(${pkgs.lib.escapeShellArgs excludedPlugins})
-    for plugin in "''${excluded[@]}"; do
-      rm -rf "$tmp/.obsidian/plugins/$plugin"
+    excluded_globs=(${pkgs.lib.escapeShellArgs excludedObsidianGlobs})
+    for glob in "''${excluded_globs[@]}"; do
+      ( cd "$tmp" && find . -path "./$glob" -exec rm -rf {} + )
     done
-
-    enabled_json="$tmp/.obsidian/community-plugins.json"
-    if [ -f "$enabled_json" ]; then
-      jq --argjson excluded ${pkgs.lib.escapeShellArg (builtins.toJSON excludedPlugins)} \
-        'map(select(IN($excluded[]) | not))' "$enabled_json" > "$enabled_json.new"
-      mv "$enabled_json.new" "$enabled_json"
-    fi
 
     # 配布先の vault は remote を持たないことがあり、起動時 pull が毎回エラー通知になる。
     # owner の vault は true のままで良いので、配布の境界であるここで落とす。
