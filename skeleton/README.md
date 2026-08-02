@@ -69,8 +69,7 @@ Google Drive へ同期する。後述）。
 ## 2. 前提とする道具立て
 
 - **Obsidian** + コミュニティプラグイン: Dataview / Tasks / **Journals**（日次・週次・月次ノート）/
-  Linter / **Obsidian Git**。数式は typst プラグインを入れていればその記法、
-  入れていなければ Obsidian 標準の LaTeX 記法で書く（後述）。
+  Linter / **Obsidian Git** / **Typst Mate**。数式は Typst 記法で書く（後述）。
 - **リンクは wikilink `[[ ]]`**（`useMarkdownLinks: false`）。`alwaysUpdateLinks` が
   有効なので、**ノートを改名してもリンクは自動追従**する（＝リンクはファイル名で解決）。
 - **バックアップは Obsidian Git**。"Create backup" で `vault backup: <日時>` という
@@ -196,8 +195,8 @@ Obsidian Git の "Create backup" コマンドを実行 → `vault backup: <日�
 
 - **ファイル名がリンクキー**：Zettel は一意な名前を付ける。衝突する場合は括弧で
   曖昧性を除去する（例: `開基 (卒業予備研究)`）。
-- **数式・記号は本文に直接書く**。typst プラグインを入れていれば typst 記法、
-  入れていなければ LaTeX 記法（`$…$` / `$$…$$`、Obsidian 標準の描画）を使う。
+- **数式・記号は本文に直接書く**。記法は **Typst**（`$…$` / `$$…$$` の中身を
+  Typst Mate が描画する）。LaTeX 記法は使わない。対応表は CLAUDE.md を参照。
 - **文献参照は pandoc 形式 `[@citekey]`**。ファイルパスや `[[*.pdf]]` は使わない。
 - **タグは限定用途**（Daily-note など）。分類の主役にはしない。
 
